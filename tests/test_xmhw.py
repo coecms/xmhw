@@ -15,8 +15,8 @@
 # limitations under the License.
 
 
-from xmhw.mhw import threshold, detect, mhw_filter 
-from mhw_fixtures import *
+from xmhw.mhw import threshold #, detect, mhw_filter 
+from xmhw_fixtures import *
 
 def test_mhw_filter():
 #mhw_filter(exceed, minDuration, joinGaps, maxGap):
@@ -29,7 +29,10 @@ def test_threshold(clim_oisst, oisst)
     seas1 = clim['seas'].sel(lat=-42.625, lon=148.125)
     th2 = clim['thresh'].sel(lat=-41.625, lon=148.375)
     seas2 = clim['seas'].sel(lat=-41.625, lon=148.375)
-    assert 
+    assert clim_oisst.thresh1.values == th1.values 
+    assert clim_oisst.thresh2.values == th2.values 
+    assert clim_oisst.seas1.values == seas1.values 
+    assert clim_oisst.seas2.values == seas2.values 
 
 def test_detect():
     assert True

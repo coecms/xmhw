@@ -24,23 +24,32 @@ def test_get_doy(oisst_ts):
     #assert get_doy(oisst_ts) == 
     assert True
 
-def test_feb29(ts):
+def test_feb29():
+#(ts):
     assert True
-def test_runavg(ts, w):
+def test_runavg():
+#(ts, w):
     assert True
-def test_window_roll(ts, w): 
+def test_window_rolli():
+#(ts, w): 
     assert True
-def test_dask_percentile(array, axis, q):
+def test_dask_percentile():
+#(array, axis, q):
     assert True
-def test_join_gaps(ds, maxGap):
+def test_join_gaps():
+#(ds, maxGap):
     assert True
-def test_mhw_filter(exceed, minDuration, joinGaps, maxGap):
+def test_mhw_filter():
+#(exceed, minDuration, joinGaps, maxGap):
     assert True
-def test_sqrt_var(array, axis):
+def test_sqrt_var():
+#(array, axis):
     assert True
-def test_cat_min(array, axis):
+def test_cat_min():
+#(array, axis):
     assert True
-def test_group_argmax(array):
+def test_group_argmax():
+#(array):
     assert True
 def test_land_check(oisst_ts, landgrid):
     newts = land_check(oisst_ts)
