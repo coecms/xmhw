@@ -29,7 +29,7 @@ land = os.path.join(TESTS_DATA, "land.nc")
 # threshold and seasonal avg calculated using Eric Olivier MHW code on two points of OISST region subset for same period 2003-2004
 # point1 lat=-42.625, lon=148.125
 # point2 lat=-41.625, lon=148.375
-oisst_clim = os.path.join(TESTS_DATA,"test_clim_oisst")
+oisst_clim = os.path.join(TESTS_DATA,"test_clim_oisst.nc")
 
 @pytest.fixture(scope="module")
 def oisst_ts():
