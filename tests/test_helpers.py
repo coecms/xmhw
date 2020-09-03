@@ -22,7 +22,7 @@ from xmhw.exception import XmhwException
 import numpy.testing as nptest
 
 def test_get_doy(oisst_ts, oisst_doy):
-    doy = get_doy(oisst_ts,dim="time").time.values 
+    doy = get_doy(oisst_ts,dim="time").doy.values 
     nptest.assert_array_equal(doy, oisst_doy) 
 
 def test_feb29():
