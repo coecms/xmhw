@@ -124,8 +124,8 @@ def join_gaps(ds, maxGap):
     return xr.merge([newst, newen], compat='override')
 
 
-def mhw_filter(exceed, minDuration, joinGaps, maxGap):
-    """ Filter events of consecutive days above threshold which ar elonger then minDuration
+def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2):
+    """ Filter events of consecutive days above threshold which are longer then minDuration
         ts - timeseries
         exceed_bool - boolean array with True values where ts >= threshold value for same dayofyear
     """
@@ -148,18 +148,21 @@ def mhw_filter(exceed, minDuration, joinGaps, maxGap):
     shifted = (events_map - events_map.shift(time=1)).shift(time=-1)
 
     shifted.load()
-    shifted[-1,:,:] = -events_map[-1,:,:]
+    shifted[-1,:] = -events_map[-1,:]
     # select only cells where shifted is less equal to the -minDuration,
     duration = events_map.where(shifted <= -minDuration)
     # from arange select where mhw duration, this will the index of last day of mhw  
     mhw_end = arange.where( ~xr.ufuncs.isnan(duration))
     # removing duration from end index gives starting index
-    mhw_start = (mhw_end - duration + 1)
+    st_idx = (mhw_end - duration + 1).dropna(dim='time').astype(int).values 
+    mhw_start = xr.full_like(mhw_end, np.nan)
+    mhw_start[st_idx[:,0],0] = st_idx[:,0]
 
     # if joinAcross Gaps call join_gaps function, this will update start, end and mappings of events
     if joinGaps:
-        ds = xr.Dataset({'start': mhw_start, 'end': mhw_end}).chunk({'time':-1,'lat':1,'lon':1})
+        ds = xr.Dataset({'start': mhw_start, 'end': mhw_end}).chunk({'time':-1,'cell':1})
         ds = xr.map_blocks(join_gaps, ds, args=[maxGap], template=ds).compute()
+        #ds = ds.groupby('cell').map(join_gaps, maxGap)
         mhw_start = ds.start
         mhw_end = ds.end
 
