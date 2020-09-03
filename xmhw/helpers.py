@@ -60,6 +60,8 @@ def runavg(ts, w):
       ts_smooth     Smoothed time series
     """
 
+    # Check if w is odd.
+    assert w%2==1, "window width in runavg should be odd"
     return ts.pad(doy=(w-1)//2, mode='wrap').rolling(doy=w, center=True).mean().dropna(dim='doy')
 
 
