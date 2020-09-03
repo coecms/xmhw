@@ -16,13 +16,13 @@
 
 #import pytest
 
-from xmhw.helpers import land_check, get_doy, window_roll, feb29 
+from xmhw.helpers import land_check, add_doy, window_roll, feb29 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
 import numpy.testing as nptest
 
-def test_get_doy(oisst_ts, oisst_doy):
-    doy = get_doy(oisst_ts.time).values 
+def test_add_doy(oisst_ts, oisst_doy):
+    doy = add_doy(oisst_ts,dim="time").doy.values 
     nptest.assert_array_equal(doy, oisst_doy) 
 
 def test_feb29():
