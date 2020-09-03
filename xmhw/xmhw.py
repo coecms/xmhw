@@ -72,8 +72,8 @@ def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
     # return an array stacked on lat/lon with land cells removed
     # new dimensions are (time,cell)
     ts = land_check(temp)
-    doy = get_doy(ts['time'])
-    ts.coords['doy'] = doy
+    ts = get_doy(ts,dim='time')
+    #ts.coords['doy'] = doy
 
     # Flip temp time series if detecting cold spells
     if coldSpells:

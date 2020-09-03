@@ -21,11 +21,15 @@ import numpy as np
 from .exception import XmhwException
 
 
-def get_doy(t):
+def get_doy(ts,dim="time"):
     """ Generate vector for day of the year as 366 days year
-        Input: timeseries.time axis
+        Input: 
+           timeseries
+           dimension name of the time axis, default "time"
         Return: doy - day of the year array to use as extra coordinate for timeseries
     """
+    # get the time axis
+    t=ts[dim]
     # get original dayofyear
     doy_original = t.dt.dayofyear
     # select all days from 1st of March onwards
@@ -34,8 +38,9 @@ def get_doy(t):
     not_leap_year = ~t.dt.is_leap_year
     # add extra day if not leap year and march or later
     doy = doy_original + (not_leap_year & march_or_later)
-    # rechunk and return new doy
-    return doy.chunk({'time': -1})
+    # rechunk and return new doy as coordinate of the "t" input variable
+    ts.coords['doy'] = doy.chunk({'time': -1})
+    return ts
 
 
 def feb29(ts):
