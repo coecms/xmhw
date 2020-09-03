@@ -22,6 +22,7 @@ import dask
 import sys
 from .helpers import join_gaps, mhw_filter, runavg, dask_percentile, window_roll
 from .helpers import land_check, feb29, add_doy 
+from .exception import XmhwException
 
 
 def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5, smoothPercentile=True, 
@@ -65,6 +66,12 @@ def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
                              of the climatology. (DEFAULT = False)
     """
 
+    # check window widths are odd
+    if windowHalfWidth%2 == 0:
+        raise XmhwException("windowHalfWidth should be odd")
+    if smoothPercentileWidth%2 == 0:
+        raise XmhwException("smoothPercentileWidth should be odd")
+
     # Set climatology period, if unset use full range of available data
     if all(climatologyPeriod):
         temp = temp.sel(time=slice(f'{climatologyPeriod[0]}-01-01',
@@ -74,7 +81,7 @@ def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
     ts = land_check(temp)
     ts = add_doy(ts,dim='time')
 
-    # Flip temp time series if detecting cold spells
+    # Flip ts time series if detecting cold spells
     if coldSpells:
         ts = -1.*ts
 
@@ -82,9 +89,11 @@ def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
     if maxPadLength:
         ts = pad(ts, maxPadLength=maxPadLength)
 
-    # Rewrite ts array to get for each doy the values in a window +/-windowHalfWidth
+    # Apply window_roll to each cell.
+    # Window_roll first finds for each day of the year all the ts values that falls in
+    # a window +/-windowHalfWidth, then concatenates them in a new timeseries
     ts = ts.chunk({'time': -1, 'cell':1})
-    twindow = ts.groupby('cell').apply(window_roll,
+    twindow = ts.groupby('cell').map(window_roll,
                   args=[windowHalfWidth])
 
     # rechunk twindow otherwise it is passed to dask_percentile as a numpy array 
@@ -93,8 +102,7 @@ def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
      # Calculate threshold and seasonal climatology across years
     thresh_climYear = (twindow
                        .groupby('doy')
-                       .reduce(dask_percentile, dim='z', q=pctile,
-                       allow_lazy=True)).compute()
+                       .reduce(dask_percentile, dim='z', q=pctile)).compute()
     seas_climYear = (twindow
                        .groupby('doy')
                        .reduce(np.nanmean)).compute()

@@ -18,22 +18,25 @@
 from xmhw.xmhw import threshold #, detect, mhw_filter 
 from xmhw_fixtures import *
 from numpy import testing as nptest
+from xmhw.exception import XmhwException
 
 def test_mhw_filter():
 #mhw_filter(exceed, minDuration, joinGaps, maxGap):
     assert True
 
 def test_threshold(clim_oisst, clim_oisst_nosmooth, oisst_ts):
-    clim = threshold(oisst_ts, smoothPercentile=False)
     #threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5, smoothPercentile=True, 
+    # test exceptions with wrong arguments
+    with pytest.raises(XmhwException):
+        clim = threshold(oisst_ts, smoothPercentileWidth=6)
+    with pytest.raises(XmhwException):
+        clim = threshold(oisst_ts, windowHalfWidth=6)
+    #threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5, smoothPercentile=True, 
+    clim = threshold(oisst_ts, smoothPercentile=False)
     th1 = clim['thresh'].sel(lat=-42.625, lon=148.125)
     seas1 = clim['seas'].sel(lat=-42.625, lon=148.125)
     th2 = clim['thresh'].sel(lat=-41.625, lon=148.375)
     seas2 = clim['seas'].sel(lat=-41.625, lon=148.375)
-    #print(clim_oisst_nosmooth.thresh1.values[57:61])
-    #print(th1.values[57:61])
-    #print(clim_oisst_nosmooth.seas1.values[57:61])
-    #print(seas1.values[57:61])
     #temporarily testing only after mid March so as to avoid the +-2 days from feb29
     nptest.assert_array_almost_equal(clim_oisst_nosmooth.thresh1[60:].values,th1[60:].values) 
     nptest.assert_array_almost_equal(clim_oisst_nosmooth.thresh2[60:].values,th2[60:].values) 
