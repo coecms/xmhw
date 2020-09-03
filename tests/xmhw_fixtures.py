@@ -15,9 +15,9 @@
 # limitations under the License.
 
 import pytest
-import py
 import os
 import xarray as xr
+import numpy as np
 
 
 TESTS_HOME = os.path.abspath(os.path.dirname(__file__))
@@ -51,4 +51,14 @@ def clim_oisst():
 def clim_oisst_nosmooth():
     ds = xr.open_dataset(oisst_clim_nosmooth)
     return ds 
+
+@pytest.fixture(scope="module")
+def oisst_doy():
+    a = np.arange(1,367)
+    b = np.delete(a,[59])
+    return np.concatenate((b,a)) 
+
+@pytest.fixture(scope="module")
+def tstack():
+    return np.array([ np.nan, 16.99, 17.39, 16.99, 17.39, 17.3 , 17.39, 17.3 , np.nan])
 

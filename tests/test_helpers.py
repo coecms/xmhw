@@ -16,41 +16,53 @@
 
 #import pytest
 
-from xmhw.helpers import land_check, get_doy, feb29 
+from xmhw.helpers import land_check, get_doy, window_roll, feb29 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
+import numpy.testing as nptest
 
-def test_get_doy(oisst_ts):
-    #assert get_doy(oisst_ts) == 
-    assert True
+def test_get_doy(oisst_ts, oisst_doy):
+    doy = get_doy(oisst_ts.time).values 
+    nptest.assert_array_equal(doy, oisst_doy) 
 
 def test_feb29():
 #(ts):
     assert True
+
 def test_runavg():
 #(ts, w):
     assert True
-def test_window_rolli():
-#(ts, w): 
-    assert True
+
+def test_window_roll(oisst_ts, tstack):
+    ts = oisst_ts.sel(time=slice('2003-01-01','2003-01-03'),lat=-42.625, lon=148.125)
+    array = window_roll(ts, 1)
+    #assert array.z.index
+    nptest.assert_almost_equal(array.values, tstack, decimal=5)
+
 def test_dask_percentile():
 #(array, axis, q):
     assert True
+
 def test_join_gaps():
 #(ds, maxGap):
     assert True
+
 def test_mhw_filter():
 #(exceed, minDuration, joinGaps, maxGap):
     assert True
+
 def test_sqrt_var():
 #(array, axis):
     assert True
+
 def test_cat_min():
 #(array, axis):
     assert True
+
 def test_group_argmax():
 #(array):
     assert True
+
 def test_land_check(oisst_ts, landgrid):
     newts = land_check(oisst_ts)
     assert newts.shape == (731, 12)
