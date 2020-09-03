@@ -21,7 +21,7 @@ import numpy as np
 import dask
 import sys
 from .helpers import join_gaps, mhw_filter, runavg, dask_percentile, window_roll
-from .helpers import land_check, feb29, get_doy 
+from .helpers import land_check, feb29, add_doy 
 
 
 def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5, smoothPercentile=True, 
@@ -72,8 +72,7 @@ def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
     # return an array stacked on lat/lon with land cells removed
     # new dimensions are (time,cell)
     ts = land_check(temp)
-    doy = get_doy(ts['time'])
-    ts.coords['doy'] = doy
+    ts = add_doy(ts,dim='time')
 
     # Flip temp time series if detecting cold spells
     if coldSpells:
