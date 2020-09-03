@@ -21,12 +21,12 @@ import numpy as np
 from .exception import XmhwException
 
 
-def get_doy(ts,dim="time"):
-    """ Generate vector for day of the year as 366 days year
+def add_doy(ts,dim="time"):
+    """ Add day of the year as 366 days year as coordinate to timeseries
         Input: 
            timeseries
            dimension name of the time axis, default "time"
-        Return: doy - day of the year array to use as extra coordinate for timeseries
+        Return: array with doy - day of the year array added as extra coordinate for timeseries
     """
     # get the time axis
     t=ts[dim]
