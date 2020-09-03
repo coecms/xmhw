@@ -190,3 +190,112 @@ def land_check(temp):
         raise XmhwException('All points of grid are either land or NaN')
     return ts
 
+def mhw_ds(start, end, events, ts, clim):
+    """ Create xarray dataset to hold mhw properties
+    """
+    # create event coordinate and arrays for start/end indexes and dates
+    #event = xr.ones_like(start) * np.arange(len(start.time)) +1
+    #event = xr.DataArray(data=start, dims=['event'], coords=[event])
+    #index_start = xr.DataArray(data=start, dims=['event'], coords=[event])
+    #index_end = xr.DataArray(data=end, dims=['event'], coords=[event])
+    #duration = end - start + 1 
+#PA possibly I need this if end defined on wrong timestamp!! Need to check
+    #date_start = ts.time.isel(time=start.values)
+    #date_end = ts.time.isel(time=end.values)
+    # create dataset
+    mhw = xr.merge([events, start, end])
+    # assign event coordinate to dataset
+    mhw.assign_coords({'event': events})
+
+    # get temp, climatologies values for events
+    ismhw = ~xr.ufuncs.isnan(events)
+    mhw_temp = ts.where(ismhw)#.transpose('lat','lon','time')
+    #temp_mhw.coords['event'] = events
+    # put doy as first dimension so it correspond to events time dimension
+    #seas = clim['seas'].transpose('doy','lat','lon')
+    #thresh = clim['thresh'].transpose('doy','lat','lon')
+    mhw_seas = xr.where(ismhw, seas.sel(doy=ismhw.doy.values).values, np.nan)
+    mhw_thresh = xr.where(ismhw, thresh.sel(doy=ismhw.doy.values).values, np.nan)
+    mhw_relSeas = mhw_temp - mhw_seas
+    mhw_relSeas.assign_coords({'event': events})
+    mhw_relSeas['event'] = events
+    mhw_relThresh = mhw_temp - mhw_thresh
+    mhw_relThresh['event'] = events
+    mhw_relThreshNorm = (mhw_temp - mhw_thresh) / (mhw_thresh - mhw_seas)
+    mhw_relThreshNorm['event'] = events
+    mhw_abs = mhw_temp
+    # Find anomaly peak for events 
+    #relSeas_group = mhw_relSeas.groupby('event', restore_coord_dims=True) #, squeeze=False) 
+    print(group_argmax(mhw_relSeas[:,1,2]))
+    sys.exit()
+    #mhw['index_peak'] = relSeas_group.reduce(np.argmax,dim='time')
+    mhw_relSeas = mhw_relSeas.chunk({'time':-1, 'lat':1, 'lon':1})
+    mhw['index_peak'] = xr.map_blocks(group_argmax, mhw_relSeas,
+                       template=mhw_relSeas).compute()
+
+    #mhw['index_peak'] = xr.apply_ufunc(np.argmax, relSeas_group, axis=0)
+    print(mhw.index_peak)
+    mhw['intensity_max'] = relSeas_group.max('time') 
+    print(mhw.intensity_max)
+    mhw['intensity_mean'] = relSeas_group.mean('time') 
+    #mhw['intensity_var'] = relSeas_group.reduce(sqrt_var) 
+    mhw['intensity_cumulative'] = relSeas_group.sum('time')
+    return mhw
+
+def moreandmore():
+    relThresh_group = mhw_relThresh.groupby('start') 
+    print('index_peak')
+    print(index_peak)
+    intensity_max_relThresh = mhw_relThresh.where(index_peak).dropna('time')
+    print(intensity_max_relThresh)
+    print(intensity_max_relThresh[0:5,1,1].doy.values)
+    intensity_mean_relThresh = relThresh_group.mean()
+    #intensity_var_relThresh = relThresh_group.reduce(sqrt_var) 
+    #intensity_var_relThresh = 
+    intensity_cumulative_relThresh = relThresh_group.sum()
+    abs_group = mhw_abs.groupby('start')
+    intensity_max_abs = mhw_abs.where(index_peak).dropna('time')
+    intensity_mean_abs = abs_group.mean()
+    #intensity_var_abs = abs_group.reduce(sqrt_var) 
+    #intensity_var_abs = intensity_mean
+    intensity_cumulative_abs = abs_group.sum()
+
+    # define categories
+    categories = np.array(['Moderate', 'Strong', 'Severe', 'Extreme'])
+    # Fix categories
+    relThreshNorm_group = mhw_relThreshNorm.groupby('start') 
+    #index_peakCat = relThreshNorm_group.argmax()
+    cats = xr.ufuncs.floor(1. + mhw_relThreshNorm)
+    #category = categories[ cats[index_peakCat].apply(cat_min) ]
+    duration_moderate = np.sum(cats == 1.)
+    duration_strong = np.sum(cats == 2.)
+    duration_severe = np.sum(cats == 3.)
+    duration_extreme = np.sum(cats >= 4.)
+
+    # define stats
+    
+    #mhw = xr.Dataset(data_vars=
+    mhw = {'date_start': date_start,
+                      'date_end': date_end,
+                      'duration': duration,
+                      'index_start': index_start,
+                      'index_end': index_end,
+                      'index_peak': index_peak,
+                      #'intensity_peak': intensity_peak,
+                      'intensity_max': intensity_max,
+                      'intensity_mean': intensity_mean,
+                      'intensity_var': intensity_var,
+                      'intensity_cumulative': intensity_cumulative,
+                      'intensity_max_relThresh': intensity_max_relThresh,
+                      'intensity_mean_relThresh': intensity_mean_relThresh,
+                      #'intensity_var_relThresh': intensity_var_relThresh,
+                      'intensity_cumulative_relThresh': intensity_cumulative_relThresh,
+                      'intensity_max_abs': intensity_max_abs,
+                      'intensity_mean_abs': intensity_mean_abs,
+                      #'intensity_var_abs': intensity_var_abs,
+                      'intensity_cumulative_abs': intensity_cumulative_abs,
+                      #'index_peakCat' : index_peakCat,
+                      #'cats': cats
+                               }#)
+    return mhw
+
