@@ -136,3 +136,73 @@ def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
     clim['missing'] = missing.unstack('cell')
 
     return clim
+
+def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, coldSpells=False) 
+    """
+
+    Applies the Hobday et al. (2016) marine heat wave definition to an input time
+    series of temp ('temp') along with a time vector ('t'). Outputs properties of
+    all detected marine heat waves.
+
+    Inputs:
+
+      temp    Temperature array [1D  xarray of length T]
+      clim    Climatology of SST. Each key (following list) is a seasonally-varying
+              time series [1D numpy array of length T] of a particular measure:
+
+        'thresh'               Seasonally varying threshold (e.g., 90th percentile)
+        'seas'                 Climatological seasonal cycle
+        'missing'              A vector of TRUE/FALSE indicating which elements in 
+                               temp were missing values for the MHWs detection
+
+      
+    
+    Outputs:
+
+      mhw     Detected marine heat waves (MHWs). Each key (following list) is a
+              list of length N where N is the number of detected MHWs:
+              ....
+
+
+    Options:
+
+      minDuration            Minimum duration for acceptance detected MHWs
+                             (DEFAULT = 5 [days])
+      joinAcrossGaps         Boolean switch indicating whether to join MHWs      
+                             which occur before/after a short gap (DEFAULT = True)
+      maxGap                 Maximum length of gap allowed for the joining of MHWs
+                             (DEFAULT = 2 [days])
+      coldSpells             Specifies if the code should detect cold events instead of
+                             heat events. (DEFAULT = False)
+    """
+  
+   
+    
+    ts = land_check(temp)
+    thresh = land_check(clim['thresh'])
+    seas = land_check(clim['seas'])
+    # assign doy 
+    ts = add_doy(ts)
+
+    # Pad missing values for all consecutive missing blocks of length <= maxPadLength
+    if maxPadLength:
+        ts = pad(ts, maxPadLength=maxPadLength)
+    # Flip temp time series if detecting cold spells
+    if coldSpells:
+        ts = -1.*ts
+
+    # Find MHWs as exceedances above the threshold
+    #
+
+    # Time series of "True" when threshold is exceeded, "False" otherwise
+    exceed_bool = ts.groupby('doy')  > thresh
+    exceed_bool = exceed_bool.chunk(chunks={'time': -1})
+
+    # Find all MHW events of duration >= minDuration   
+    mhw_start_idx, mhw_end_idx, events = mhw_filter(exceed_bool, minDuration, joinAcrossGaps, maxGap)
+    # Save mhw characteristic in dataset still working on this 
+    #mhw = mhw_ds(mhw_start_idx, mhw_end_idx, events, ts, clim)
+    #ts_events = temp.where(events)
+    mhw = [mhw_start_idx, mhw_end_idx, events]
+    
+    return   mhw, clim
