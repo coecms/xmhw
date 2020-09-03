@@ -16,10 +16,11 @@
 
 #import pytest
 
-from xmhw.helpers import land_check, add_doy, window_roll, feb29 
+from xmhw.helpers import land_check, add_doy, window_roll, mhw_filter, feb29 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
 import numpy.testing as nptest
+import xarray.testing as xrtest
 
 def test_add_doy(oisst_ts, oisst_doy):
     doy = add_doy(oisst_ts,dim="time").doy.values 
@@ -47,9 +48,21 @@ def test_join_gaps():
 #(ds, maxGap):
     assert True
 
-def test_mhw_filter():
-#(exceed, minDuration, joinGaps, maxGap):
-    assert True
+def test_mhw_filter(mhwfilter):
+    exceed, st, en, evs = mhwfilter
+    # test with joinGaps=False
+    [start, end, events] = mhw_filter(exceed, 5, joinGaps=False)
+    xrtest.assert_equal( start, st)
+    xrtest.assert_equal( end, en)
+    xrtest.assert_equal( events, evs)
+    # test with default joinGaps True and maxGaps=2, join 2nd and 3rd events
+    #[start, end, events] = mhw_filter(exceed, 5)
+    #st[20] = np.nan
+    #en[17] = np.nan
+    #evs[18:25] = 11
+    #xrtest.assert_equal( start, st)
+    #xrtest.assert_equal( end, en)
+    #xrtest.assert_equal( events, evs)
 
 def test_sqrt_var():
 #(array, axis):

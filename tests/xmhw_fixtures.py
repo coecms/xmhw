@@ -18,6 +18,7 @@ import pytest
 import os
 import xarray as xr
 import numpy as np
+import pandas as pd
 
 
 TESTS_HOME = os.path.abspath(os.path.dirname(__file__))
@@ -62,3 +63,23 @@ def oisst_doy():
 def tstack():
     return np.array([ np.nan, 16.99, 17.39, 16.99, 17.39, 17.3 , 17.39, 17.3 , np.nan])
 
+@pytest.fixture(scope="module")
+def mhwfilter():
+    a = [0,1,1,1,1,1,0,0,1,1,0,1,1,1,1,1,1,1,0,0,1,1,1,1,1,0,0,0,0]
+    time =  pd.date_range('2001-01-01', periods=len(a))
+    array = xr.DataArray(a, dims=['time'], coords=[time])
+    array = array.expand_dims('cell', axis=1)
+    exceed = array==1
+    st = xr.full_like(array,np.nan, dtype=np.float)
+    end = xr.full_like(array,np.nan, dtype=np.float)
+    events = xr.full_like(array,np.nan, dtype=np.float)
+    st[1] = 1
+    st[11] = 11
+    st[20] = 20
+    end[5] = 5
+    end[17] = 17
+    end[24] = 24
+    events[1:6] = 1
+    events[11:18] = 11
+    events[20:25] =20 
+    return (exceed, st, end, events) 

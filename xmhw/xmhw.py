@@ -137,7 +137,7 @@ def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
 
     return clim
 
-def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, coldSpells=False) 
+def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=False, coldSpells=False): 
     """
 
     Applies the Hobday et al. (2016) marine heat wave definition to an input time
@@ -172,6 +172,11 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, col
                              which occur before/after a short gap (DEFAULT = True)
       maxGap                 Maximum length of gap allowed for the joining of MHWs
                              (DEFAULT = 2 [days])
+      maxPadLength           Specifies the maximum length [days] over which to interpolate
+                             (pad) missing data (specified as nans) in input temp time series.
+                             i.e., any consecutive blocks of NaNs with length greater
+                             than maxPadLength will be left as NaN. Set as an integer.
+                             (DEFAULT = False, interpolates over all missing values).
       coldSpells             Specifies if the code should detect cold events instead of
                              heat events. (DEFAULT = False)
     """
@@ -179,8 +184,8 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, col
    
     
     ts = land_check(temp)
-    thresh = land_check(clim['thresh'])
-    seas = land_check(clim['seas'])
+    thresh = land_check(thresh)
+    seas = land_check(seas)
     # assign doy 
     ts = add_doy(ts)
 
@@ -205,4 +210,4 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, col
     #ts_events = temp.where(events)
     mhw = [mhw_start_idx, mhw_end_idx, events]
     
-    return   mhw, clim
+    return   mhw
