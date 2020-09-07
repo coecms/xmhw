@@ -204,10 +204,10 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
     exceed_bool = exceed_bool.chunk(chunks={'time': -1})
 
     # Find all MHW events of duration >= minDuration   
-    mhw_start_idx, mhw_end_idx, events = mhw_filter(exceed_bool, minDuration, joinAcrossGaps, maxGap)
+    mhw_start, mhw_end, events = mhw_filter(exceed_bool, minDuration, joinAcrossGaps, maxGap)
     # Save mhw characteristic in dataset still working on this 
     #mhw = mhw_ds(mhw_start_idx, mhw_end_idx, events, ts, clim)
     #ts_events = temp.where(events)
-    mhw = [mhw_start_idx, mhw_end_idx, events]
+    mhw = [mhw_start, mhw_end, events]
     
     return   mhw

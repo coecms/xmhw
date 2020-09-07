@@ -89,21 +89,22 @@ def dask_percentile(array, axis, q):
         drop_axis=axis)
 
 
-def join_gaps(ds, maxGap):
+def join_gaps(start, end, maxGap, tdim='time'):
     """Find gaps between mhws which are less equal to maxGap and join adjacent mhw into one event
        Input:
-             ds.start - array of mhw start indexes
-             ds.end - array of mhw end indexes
-             maxGap - all gaps <= maxGap arre removed
+             s - array of mhw start indexes
+             e - array of mhw end indexes
+             maxGap - all gaps <= maxGap are removed
     """
     # calculate gaps by subtracting index of end of each mhw from start of successive mhw
     # select as True all gaps > maxGap, these are the values we'll be keeping
     
-    start = ds.start.dropna(dim='time')
-    end = ds.end.dropna(dim='time')
+    s = start.dropna(dim=tdim)
+    e = end.dropna(dim=tdim)
+    pairs = set(zip(s.squeeze().values,e.squeeze().values))
     
-    if len(start.time) >0 :
-        gaps = ((start - end.shift(time=1)) > maxGap)
+    if len(s[tdim]) >0 :
+        gaps = ((s - e.shift(time=1)) > maxGap + 1)
     # load first value so be set to True instead of NaN
         gaps.load()
         gaps[0] = True 
@@ -111,17 +112,16 @@ def join_gaps(ds, maxGap):
     # shift back gaps series
         gaps_shifted = gaps.shift(time=-1)
     # use "gaps" to select start indexes to keep
-        start = start.where(gaps, drop=True)
+        s = s.where(gaps, drop=True)
     # use "gaps_shifted" to select end indexes and duration to keep
-        end = end.where(gaps_shifted, drop=True)
+        e = e.where(gaps_shifted, drop=True)
+        joined = set(zip(s.squeeze().values,e.squeeze().values)) - pairs
     # reindex so we have a complete time axis
-        newst = start.reindex_like(ds.start)
-        newen = end.reindex_like(ds.end)
-        newst.name = 'start'
-        newen.name = 'end'
+        st = s.reindex_like(start)
+        en = e.reindex_like(end)
     else:
-        return ds
-    return xr.merge([newst, newen], compat='override')
+        return s, e, set()
+    return st, en, joined
 
 
 def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2):
@@ -152,31 +152,33 @@ def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2):
     # select only cells where shifted is less equal to the -minDuration,
     duration = events_map.where(shifted <= -minDuration)
     # from arange select where mhw duration, this will the index of last day of mhw  
-    mhw_end = arange.where( ~xr.ufuncs.isnan(duration))
+    end = arange.where( ~xr.ufuncs.isnan(duration))
     # removing duration from end index gives starting index
-    st_idx = (mhw_end - duration + 1).dropna(dim='time').astype(int).values 
-    mhw_start = xr.full_like(mhw_end, np.nan)
-    mhw_start[st_idx[:,0],0] = st_idx[:,0]
+    start = (end - duration + 1)
+
+    # add 1 to events so each event is represented by its starting index
+    events = events + 1
+    # Selected mhw will be represented by indexes where "events" has values included in mhw_start_idx list
+    # and where "events_map" is not 0
+    sel_events = events.where(events.isin(start) & (events_map != 0))
+    sel_events.name = 'events'
 
     # if joinAcross Gaps call join_gaps function, this will update start, end and mappings of events
     if joinGaps:
-        ds = xr.Dataset({'start': mhw_start, 'end': mhw_end}).chunk({'time':-1,'cell':1})
-        ds = xr.map_blocks(join_gaps, ds, args=[maxGap], template=ds).compute()
-        #ds = ds.groupby('cell').map(join_gaps, maxGap)
-        mhw_start = ds.start
-        mhw_end = ds.end
+        start, end, joined = join_gaps(start, end, maxGap, tdim='time')
+        for s,e in joined:
+           sel_events[int(s):int(e)+1] = s
 
-    # add 1 to events so each event is represent by is starting index
-    events = events + 1
-    # Selected mhw will be represented by indexes where "events" has values included in mhw_star_idx list
-    # and where "events_map" is not 0
-    
-    sel_events = events.where(events.isin(mhw_start) & (events_map != 0))
-    sel_events.name = 'events'
-    mhw_start.name = 'start'
-    mhw_end.name = 'end'
+    # set this aside for the moment
+    # recreate start arrays with start of events on correct time and not on end time
+    #st_idx = start.dropna(dim='time').astype(int).values 
+    #start2 = xr.full_like(start, np.nan)
+    #start2[st_idx] = st_idx
+    #starts[0,st_idx] = st_idx
+    start.name = 'start'
+    end.name = 'end'
 
-    return  mhw_start, mhw_end, sel_events
+    return  start, end, sel_events
 
 def land_check(temp):
     """ Stack lat/lon on new dimension cell and remove for land points
