@@ -73,9 +73,9 @@ def mhwfilter():
     st = xr.full_like(array,np.nan, dtype=np.float)
     end = xr.full_like(array,np.nan, dtype=np.float)
     events = xr.full_like(array,np.nan, dtype=np.float)
-    st[1] = 1
-    st[11] = 11
-    st[20] = 20
+    st[5] = 1
+    st[17] = 11
+    st[24] = 20
     end[5] = 5
     end[17] = 17
     end[24] = 24

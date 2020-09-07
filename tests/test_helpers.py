@@ -56,13 +56,13 @@ def test_mhw_filter(mhwfilter):
     xrtest.assert_equal( end, en)
     xrtest.assert_equal( events, evs)
     # test with default joinGaps True and maxGaps=2, join 2nd and 3rd events
-    #[start, end, events] = mhw_filter(exceed, 5)
-    #st[20] = np.nan
-    #en[17] = np.nan
-    #evs[18:25] = 11
-    #xrtest.assert_equal( start, st)
-    #xrtest.assert_equal( end, en)
-    #xrtest.assert_equal( events, evs)
+    [start, end, events] = mhw_filter(exceed, 5)
+    st[24] = np.nan
+    en[17] = np.nan
+    evs[18:25] = 11
+    xrtest.assert_equal( start, st)
+    xrtest.assert_equal( end, en)
+    xrtest.assert_equal( events, evs)
 
 def test_sqrt_var():
 #(array, axis):
