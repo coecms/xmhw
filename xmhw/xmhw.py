@@ -20,7 +20,7 @@ import xarray as xr
 import numpy as np
 import dask
 import sys
-from .helpers import join_gaps, mhw_filter, runavg, dask_percentile, window_roll
+from .helpers import join_gaps, mhw_filter, mhw_ds, runavg, dask_percentile, window_roll
 from .helpers import land_check, feb29, add_doy 
 from .exception import XmhwException
 
@@ -204,10 +204,8 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
     exceed_bool = exceed_bool.chunk(chunks={'time': -1})
 
     # Find all MHW events of duration >= minDuration   
-    mhw_start, mhw_end, events = mhw_filter(exceed_bool, minDuration, joinAcrossGaps, maxGap)
+    ds = mhw_filter(exceed_bool, minDuration, joinAcrossGaps, maxGap)
     # Save mhw characteristic in dataset still working on this 
-    #mhw = mhw_ds(mhw_start_idx, mhw_end_idx, events, ts, clim)
-    #ts_events = temp.where(events)
-    mhw = [mhw_start, mhw_end, events]
+    mhw = mhw_ds(ds, ts, thresh, seas)
     
     return   mhw
