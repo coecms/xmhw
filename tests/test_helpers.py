@@ -49,6 +49,7 @@ def test_join_gaps():
     assert True
 
 def test_mhw_filter(mhwfilter):
+    # These tests only check on 1 D to make sure it work on 2 d add extra tests
     exceed, st, en, evs = mhwfilter
     # test with joinGaps=False
     [start, end, events] = mhw_filter(exceed, 5, joinGaps=False)

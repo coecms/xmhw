@@ -18,6 +18,7 @@
 
 import xarray as xr
 import numpy as np
+import sys
 from .exception import XmhwException
 
 
@@ -89,21 +90,20 @@ def dask_percentile(array, axis, q):
         drop_axis=axis)
 
 
-def join_gaps(start, end, maxGap, tdim='time'):
+def join_gaps(ds, maxGap, tdim='time'):
     """Find gaps between mhws which are less equal to maxGap and join adjacent mhw into one event
        Input:
-             s - array of mhw start indexes
-             e - array of mhw end indexes
+             ds.start - array of mhw start indexes
+             ds.end - array of mhw end indexes
              maxGap - all gaps <= maxGap are removed
     """
     # calculate gaps by subtracting index of end of each mhw from start of successive mhw
     # select as True all gaps > maxGap, these are the values we'll be keeping
+    s = ds.start.dropna(dim=tdim)
+    e = ds.end.dropna(dim=tdim)
     
-    s = start.dropna(dim=tdim)
-    e = end.dropna(dim=tdim)
-    pairs = set(zip(s.squeeze().values,e.squeeze().values))
-    
-    if len(s[tdim]) >0 :
+    if len(s[tdim]) > 1 :
+        pairs = set(zip(s.squeeze().values,e.squeeze().values))
         gaps = ((s - e.shift(time=1)) > maxGap + 1)
     # load first value so be set to True instead of NaN
         gaps.load()
@@ -117,11 +117,13 @@ def join_gaps(start, end, maxGap, tdim='time'):
         e = e.where(gaps_shifted, drop=True)
         joined = set(zip(s.squeeze().values,e.squeeze().values)) - pairs
     # reindex so we have a complete time axis
-        st = s.reindex_like(start)
-        en = e.reindex_like(end)
+        ds['start'] = s.reindex_like(ds.start)
+        ds['end'] = e.reindex_like(ds.end)
+    # update events which were joined
+        ds['events'] = join_events(ds.events, joined)
     else:
-        return s, e, set()
-    return st, en, joined
+        return ds
+    return ds
 
 
 def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2):
@@ -164,10 +166,9 @@ def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2):
     sel_events.name = 'events'
 
     # if joinAcross Gaps call join_gaps function, this will update start, end and mappings of events
+    ds = xr.Dataset({'start': start, 'end': end, 'events': sel_events}).chunk({'time':-1,'cell':1})
     if joinGaps:
-        start, end, joined = join_gaps(start, end, maxGap, tdim='time')
-        for s,e in joined:
-           sel_events[int(s):int(e)+1] = s
+        ds = ds.groupby('cell').map(join_gaps, args=[maxGap], tdim='time')
 
     # set this aside for the moment
     # recreate start arrays with start of events on correct time and not on end time
@@ -175,10 +176,8 @@ def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2):
     #start2 = xr.full_like(start, np.nan)
     #start2[st_idx] = st_idx
     #starts[0,st_idx] = st_idx
-    start.name = 'start'
-    end.name = 'end'
+    return  ds
 
-    return  start, end, sel_events
 
 def land_check(temp):
     """ Stack lat/lon on new dimension cell and remove for land points
@@ -195,76 +194,66 @@ def land_check(temp):
         raise XmhwException('All points of grid are either land or NaN')
     return ts
 
-def mhw_ds(start, end, events, ts, clim):
-    """ Create xarray dataset to hold mhw properties
+def mhw_ds(ds, ts, thresh, seas):
+    """ Calculate and add to dataset mhw properties
     """
-    # create event coordinate and arrays for start/end indexes and dates
-    #event = xr.ones_like(start) * np.arange(len(start.time)) +1
-    #event = xr.DataArray(data=start, dims=['event'], coords=[event])
-    #index_start = xr.DataArray(data=start, dims=['event'], coords=[event])
-    #index_end = xr.DataArray(data=end, dims=['event'], coords=[event])
-    #duration = end - start + 1 
-#PA possibly I need this if end defined on wrong timestamp!! Need to check
     #date_start = ts.time.isel(time=start.values)
     #date_end = ts.time.isel(time=end.values)
-    # create dataset
-    mhw = xr.merge([events, start, end])
+    # transpose datset so order of coordinates is the same as other arrays
+    ds = ds.transpose('time', 'cell')
     # assign event coordinate to dataset
-    mhw.assign_coords({'event': events})
+    print(ds.events['time'])
+    ds = ds.assign_coords({'event': ds.events})
+    ds['event'].assign_coords({'time': ds.time})
 
     # get temp, climatologies values for events
-    ismhw = ~xr.ufuncs.isnan(events)
-    mhw_temp = ts.where(ismhw)#.transpose('lat','lon','time')
+    ismhw = ~xr.ufuncs.isnan(ds.events)
+    mhw_temp = ts.where(ismhw)
     #temp_mhw.coords['event'] = events
-    # put doy as first dimension so it correspond to events time dimension
-    #seas = clim['seas'].transpose('doy','lat','lon')
-    #thresh = clim['thresh'].transpose('doy','lat','lon')
     mhw_seas = xr.where(ismhw, seas.sel(doy=ismhw.doy.values).values, np.nan)
     mhw_thresh = xr.where(ismhw, thresh.sel(doy=ismhw.doy.values).values, np.nan)
-    mhw_relSeas = mhw_temp - mhw_seas
-    mhw_relSeas.assign_coords({'event': events})
-    mhw_relSeas['event'] = events
-    mhw_relThresh = mhw_temp - mhw_thresh
-    mhw_relThresh['event'] = events
-    mhw_relThreshNorm = (mhw_temp - mhw_thresh) / (mhw_thresh - mhw_seas)
-    mhw_relThreshNorm['event'] = events
+    relSeas = mhw_temp - mhw_seas
+    relSeas['event'] = ds.events
+    relThresh = mhw_temp - mhw_thresh
+    relThresh['event'] = ds.events
+    relThreshNorm = (mhw_temp - mhw_thresh) / (mhw_thresh - mhw_seas)
+    relThreshNorm['event'] = ds.events
     mhw_abs = mhw_temp
+
     # Find anomaly peak for events 
-    #relSeas_group = mhw_relSeas.groupby('event', restore_coord_dims=True) #, squeeze=False) 
-    print(group_argmax(mhw_relSeas[:,1,2]))
-    sys.exit()
-    #mhw['index_peak'] = relSeas_group.reduce(np.argmax,dim='time')
-    mhw_relSeas = mhw_relSeas.chunk({'time':-1, 'lat':1, 'lon':1})
-    mhw['index_peak'] = xr.map_blocks(group_argmax, mhw_relSeas,
-                       template=mhw_relSeas).compute()
+    relSeas = relSeas.chunk({'time':-1, 'cell':1})
+    relSeas_group = relSeas.groupby('cell')  
+    # this operation changes also the 'event' dimension reducing it to the actual number of events across all cells
+    relSeas_argmax = relSeas_group.map(group_function, args=[np.argmax], dim='event')
+    ds['index_peak'] = relSeas_argmax.event + relSeas_argmax
+    ds['intensity_max'] = relSeas_group.map(group_function, args=[np.max], dim='event')
+    ds['intensity_mean'] = relSeas_group.map(group_function, args=[np.mean], dim='event') 
+    var = relSeas_group.map(group_function, args=[np.var], dim='event') 
+    ds['intensity_var'] = xr.ufuncs.sqrt(var) 
+    ds['intensity_cumulative'] = relSeas_group.map(group_function, args=[np.sum], dim='event')
+    # stats for 
+    relThresh = relThresh.chunk({'time':-1, 'cell':1})
+    relThresh_group = relThresh.groupby('cell') 
+    dsdict = {'peak': ds.index_peak, 'relT': relThresh, 'relTN': relThreshNorm,'mabs': mhw_abs}
+    #ds['intensity_max_relThresh'], ds['intensity_max_relThreshNorm'], ds['intensity_max_abs'] = (
+    #     ds2.groupby('cell').map(get_peak) )
+    ds2 = xr.Dataset(dsdict).groupby('cell').map(get_peak, 
+             args=[[k for k in dsdict.keys() if k != 'peak']])
+    ds['intensity_max_relThresh'] = ds2.relT
+    ds['intensity_max_relThreshNorm'] = ds2.relTN
+    ds['intensity_max_abs'] = ds2.mabs
+    var = relThresh_group.map(group_function, args=[np.var], dim='event') 
+    ds['intensity_var_relThresh'] = xr.ufuncs.sqrt(var) 
+    ds['intensity_cumulative_relThresh'] = relThresh_group.map(group_function, args=[np.sum], dim='event')
+    # abs stats
+    abs_group = mhw_abs.groupby('cell')
+    ds['intensity_mean_abs'] = abs_group.map(group_function, args=[np.mean], dim='event') 
+    var = abs_group.map(group_function, args=[np.var], dim='event') 
+    ds['intensity_var_abs'] = xr.ufuncs.sqrt(var) 
+    ds['intensity_cumulative'] = abs_group.map(group_function, args=[np.sum], dim='event')
+    return ds #, relSeas, relThresh, relThreshNorm, mhw_abs
 
-    #mhw['index_peak'] = xr.apply_ufunc(np.argmax, relSeas_group, axis=0)
-    print(mhw.index_peak)
-    mhw['intensity_max'] = relSeas_group.max('time') 
-    print(mhw.intensity_max)
-    mhw['intensity_mean'] = relSeas_group.mean('time') 
-    #mhw['intensity_var'] = relSeas_group.reduce(sqrt_var) 
-    mhw['intensity_cumulative'] = relSeas_group.sum('time')
-    return mhw
-
-def moreandmore():
-    relThresh_group = mhw_relThresh.groupby('start') 
-    print('index_peak')
-    print(index_peak)
-    intensity_max_relThresh = mhw_relThresh.where(index_peak).dropna('time')
-    print(intensity_max_relThresh)
-    print(intensity_max_relThresh[0:5,1,1].doy.values)
-    intensity_mean_relThresh = relThresh_group.mean()
-    #intensity_var_relThresh = relThresh_group.reduce(sqrt_var) 
-    #intensity_var_relThresh = 
-    intensity_cumulative_relThresh = relThresh_group.sum()
-    abs_group = mhw_abs.groupby('start')
-    intensity_max_abs = mhw_abs.where(index_peak).dropna('time')
-    intensity_mean_abs = abs_group.mean()
-    #intensity_var_abs = abs_group.reduce(sqrt_var) 
-    #intensity_var_abs = intensity_mean
-    intensity_cumulative_abs = abs_group.sum()
-
+def categories():
     # define categories
     categories = np.array(['Moderate', 'Strong', 'Severe', 'Extreme'])
     # Fix categories
@@ -279,28 +268,33 @@ def moreandmore():
 
     # define stats
     
-    #mhw = xr.Dataset(data_vars=
-    mhw = {'date_start': date_start,
-                      'date_end': date_end,
-                      'duration': duration,
-                      'index_start': index_start,
-                      'index_end': index_end,
-                      'index_peak': index_peak,
-                      #'intensity_peak': intensity_peak,
-                      'intensity_max': intensity_max,
-                      'intensity_mean': intensity_mean,
-                      'intensity_var': intensity_var,
-                      'intensity_cumulative': intensity_cumulative,
-                      'intensity_max_relThresh': intensity_max_relThresh,
-                      'intensity_mean_relThresh': intensity_mean_relThresh,
-                      #'intensity_var_relThresh': intensity_var_relThresh,
-                      'intensity_cumulative_relThresh': intensity_cumulative_relThresh,
-                      'intensity_max_abs': intensity_max_abs,
-                      'intensity_mean_abs': intensity_mean_abs,
-                      #'intensity_var_abs': intensity_var_abs,
-                      'intensity_cumulative_abs': intensity_cumulative_abs,
-                      #'index_peakCat' : index_peakCat,
-                      #'cats': cats
-                               }#)
     return mhw
 
+def group_function(array, func, dim='event'):
+    """ Run function on array after groupby on event dimension """
+    return array.groupby(dim).reduce(func)
+
+def get_peak(ds, variables, dim='event'):
+    """ Return relThresh and relThreshNorm  where index_peak
+    """
+    peak = ds.peak.dropna(dim=dim).load()
+    ds2 = xr.Dataset()
+    for v in variables:
+        val = [ds[v][np.int(x)] for x in peak.values]
+        ds2[v] = peak.copy()
+        ds2[v][:] = val
+        ds2.reindex_like(ds.peak)
+    return ds2
+
+def cat_min(array, axis):
+    """
+    """
+    return np.min([array, 4]).astype(int) - 1
+
+def join_events(events, joined):
+    """ Set right value for joined events """
+    if len(joined) > 0:
+        events.load()
+        for s,e in joined:
+            events[int(s):int(e)+1] = s
+    return events
