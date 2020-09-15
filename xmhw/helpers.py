@@ -44,14 +44,14 @@ def add_doy(ts,dim="time"):
     return ts
 
 
-def feb29(ts):
+def feb29(ts, dim='doy'):
     """
     This function supports leap years. This is done by ignoring Feb 29s for the initial
          calculation of the climatology and threshold. The value of these for Feb 29 is then
          linearly interpolated from the values for Feb 28 and Mar 1.
     """
-    #return (ts.where(ts.doy.isin([59,60,61]),drop=True).mean(dim='doy').values)
-    return (ts.where(ts.doy.isin([59,61]),drop=True).mean(dim='doy').values)
+    #return (ts.where(ts.doy.isin([59,60,61]),drop=True).mean(dim=dim).values)
+    return (ts.where(ts.doy.isin([59,61]),drop=True).mean(dim=dim).values)
 
 
 def runavg(ts, w):
