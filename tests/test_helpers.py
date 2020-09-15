@@ -27,9 +27,12 @@ def test_add_doy(oisst_ts, oisst_doy):
     doy = add_doy(oisst_ts,dim="time").doy.values 
     nptest.assert_array_equal(doy, oisst_doy) 
 
-def test_feb29():
-#(ts):
-    assert True
+def test_feb29(oisst_ts):
+    # this is testing for feb29 averaging 28 Feb and 1st of march I believe it should i nclude 29 Feb too!
+    ts = add_doy(oisst_ts, dim="time")
+    a =np.array([18.2074995])
+    b = feb29(ts, dim='time')
+    nptest.assert_almost_equal(a, b[1,2], decimal=5) 
 
 def test_runavg():
 #(ts, w):
@@ -88,10 +91,10 @@ def test_get_peak():
 
 def test_cat_duration():
     a = np.array([1,2,1,1,3,2,1])
-    assert cat_duration(a,arg=1) == 4  
-    assert cat_duration(a,arg=1) == 2  
-    assert cat_duration(a,arg=2) == 1  
-    assert cat_duration(a,arg=3) == 0  
+    assert cat_duration(a,0,arg=1) == 4  
+    assert cat_duration(a,0,arg=2) == 2  
+    assert cat_duration(a,0,arg=3) == 1  
+    assert cat_duration(a,0,arg=4) == 0  
 
 def test_mhw_ds():
     assert True
