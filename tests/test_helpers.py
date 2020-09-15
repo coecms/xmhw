@@ -24,12 +24,12 @@ import numpy.testing as nptest
 import xarray.testing as xrtest
 
 def test_add_doy(oisst_ts, oisst_doy):
-    doy = add_doy(oisst_ts,dim="time").doy.values 
+    doy = add_doy(oisst_ts, tdim="time").doy.values 
     nptest.assert_array_equal(doy, oisst_doy) 
 
 def test_feb29(oisst_ts):
     # this is testing for feb29 averaging 28 Feb and 1st of march I believe it should i nclude 29 Feb too!
-    ts = add_doy(oisst_ts, dim="time")
+    ts = add_doy(oisst_ts, tdim="time")
     a =np.array([18.2074995])
     b = feb29(ts, dim='time')
     nptest.assert_almost_equal(a, b[1,2], decimal=5) 
@@ -40,7 +40,7 @@ def test_runavg():
 
 def test_window_roll(oisst_ts, tstack):
     ts = oisst_ts.sel(time=slice('2003-01-01','2003-01-03'),lat=-42.625, lon=148.125)
-    array = window_roll(ts, 1)
+    array = window_roll(ts, 1, 'time')
     #assert array.z.index
     nptest.assert_almost_equal(array.values, tstack, decimal=5)
 
@@ -107,6 +107,7 @@ def test_join_events():
     assert True
 
 def test_land_check(oisst_ts, landgrid):
+    # should add test with timeseries with different dimension names
     newts = land_check(oisst_ts)
     assert newts.shape == (731, 12)
     with pytest.raises(XmhwException):

@@ -25,7 +25,7 @@ from .helpers import land_check, feb29, add_doy
 from .exception import XmhwException
 
 
-def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5, smoothPercentile=True, 
+def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5, smoothPercentile=True, 
                    smoothPercentileWidth=31, maxPadLength=False, coldSpells=False, Ly=False):
     """Calculate threshold and seasonal climatology (varying with day-of-year)
 
@@ -41,6 +41,7 @@ def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
 
     Options:
 
+      tdim                   Time dimension name, default='time'
       climatologyPeriod      Period over which climatology is calculated, specified
                              as list of start and end years. Default is to calculate
                              over the full range of years in the supplied time series.
@@ -76,10 +77,11 @@ def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
     if all(climatologyPeriod):
         temp = temp.sel(time=slice(f'{climatologyPeriod[0]}-01-01',
                                    f'{climatologyPeriod[1]}-12-31'))
-    # return an array stacked on lat/lon with land cells removed
+    # return an array stacked on all dimensions excluded time
+    # Land cells are removed
     # new dimensions are (time,cell)
-    ts = land_check(temp)
-    ts = add_doy(ts,dim='time')
+    ts = land_check(temp, tdim=tdim)
+    ts = add_doy(ts, tdim=tdim)
 
     # Flip ts time series if detecting cold spells
     if coldSpells:
@@ -92,9 +94,9 @@ def threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
     # Apply window_roll to each cell.
     # Window_roll first finds for each day of the year all the ts values that falls in
     # a window +/-windowHalfWidth, then concatenates them in a new timeseries
-    ts = ts.chunk({'time': -1, 'cell':1})
+    ts = ts.chunk({tdim: -1, 'cell':1})
     twindow = ts.groupby('cell').map(window_roll,
-                  args=[windowHalfWidth])
+                  args=[windowHalfWidth, tdim])
 
     # rechunk twindow otherwise it is passed to dask_percentile as a numpy array 
     twindow = twindow.chunk({'z': -1})
@@ -201,7 +203,7 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
 
     # Time series of "True" when threshold is exceeded, "False" otherwise
     exceed_bool = ts.groupby('doy')  > thresh
-    exceed_bool = exceed_bool.chunk(chunks={'time': -1})
+    exceed_bool = exceed_bool.chunk(chunks={tdim: -1})
 
     # Find all MHW events of duration >= minDuration   
     ds = mhw_filter(exceed_bool, minDuration, joinAcrossGaps, maxGap)

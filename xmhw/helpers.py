@@ -22,7 +22,7 @@ import sys
 from .exception import XmhwException
 
 
-def add_doy(ts,dim="time"):
+def add_doy(ts, tdim="time"):
     """ Add day of the year as 366 days year as coordinate to timeseries
         Input: 
            timeseries
@@ -30,7 +30,7 @@ def add_doy(ts,dim="time"):
         Return: array with doy - day of the year array added as extra coordinate for timeseries
     """
     # get the time axis
-    t=ts[dim]
+    t = ts[tdim]
     # get original dayofyear
     doy_original = t.dt.dayofyear
     # select all days from 1st of March onwards
@@ -69,12 +69,12 @@ def runavg(ts, w):
     return ts.pad(doy=(w-1)//2, mode='wrap').rolling(doy=w, center=True).mean().dropna(dim='doy')
 
 
-def window_roll(ts, w): 
+def window_roll(ts, w, tdim): 
     """Return all values falling in -w/+w window from each value in array"""
     
     width = 2*w+1
     trolled = ts.rolling(time=width, center=True).construct('wdim')
-    return trolled.stack(z=('wdim', 'time'))#.reset_index('z')
+    return trolled.stack(z=('wdim', tdim))#.reset_index('z')
 
 
 def dask_percentile(array, axis, q):
@@ -181,14 +181,17 @@ def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2):
     return  ds
 
 
-def land_check(temp):
+def land_check(temp, tdim='time'):
     """ Stack lat/lon on new dimension cell and remove for land points
         Input:
         temp - sst timeseries on 3D grid
         Return
         ts - modified timeseries with stacked lat/lon and land points removed  
     """
-    ts = temp.stack(cell=('lat','lon'))
+    dims = list(temp.dims)
+    dims.remove(tdim)
+    #ts = temp.stack(cell=('lat','lon'))
+    ts = temp.stack(cell=(dims))
     # drop cells that have all nan values along time
     ts = ts.dropna(dim='cell',how='all')
     # if ts.cell.shape is 0 then all points are land, quit
@@ -201,8 +204,6 @@ def mhw_ds(ds, ts, thresh, seas):
     """
     #date_start = ts.time.isel(time=start.values)
     #date_end = ts.time.isel(time=end.values)
-    # transpose dataset so order of coordinates is the same as other arrays
-    #ds = ds.transpose('time', 'cell')
     # assign event coordinate to dataset
     ds = ds.assign_coords({'event': ds.events})
     ds['event'].assign_coords({'time': ds.time})
