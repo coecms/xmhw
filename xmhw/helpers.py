@@ -169,6 +169,8 @@ def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2):
     ds = xr.Dataset({'start': start, 'end': end, 'events': sel_events}).chunk({'time':-1,'cell':1})
     if joinGaps:
         ds = ds.groupby('cell').map(join_gaps, args=[maxGap], tdim='time')
+    # transpose dataset so order of coordinates is the same as other arrays
+        ds = ds.transpose('time', 'cell')
 
     # set this aside for the moment
     # recreate start arrays with start of events on correct time and not on end time
@@ -199,10 +201,9 @@ def mhw_ds(ds, ts, thresh, seas):
     """
     #date_start = ts.time.isel(time=start.values)
     #date_end = ts.time.isel(time=end.values)
-    # transpose datset so order of coordinates is the same as other arrays
-    ds = ds.transpose('time', 'cell')
+    # transpose dataset so order of coordinates is the same as other arrays
+    #ds = ds.transpose('time', 'cell')
     # assign event coordinate to dataset
-    print(ds.events['time'])
     ds = ds.assign_coords({'event': ds.events})
     ds['event'].assign_coords({'time': ds.time})
 
@@ -234,13 +235,10 @@ def mhw_ds(ds, ts, thresh, seas):
     # stats for 
     relThresh = relThresh.chunk({'time':-1, 'cell':1})
     relThresh_group = relThresh.groupby('cell') 
-    dsdict = {'peak': ds.index_peak, 'relT': relThresh, 'relTN': relThreshNorm,'mabs': mhw_abs}
-    #ds['intensity_max_relThresh'], ds['intensity_max_relThreshNorm'], ds['intensity_max_abs'] = (
-    #     ds2.groupby('cell').map(get_peak) )
+    dsdict = {'peak': ds.index_peak, 'relT': relThresh, 'mabs': mhw_abs}
     ds2 = xr.Dataset(dsdict).groupby('cell').map(get_peak, 
              args=[[k for k in dsdict.keys() if k != 'peak']])
     ds['intensity_max_relThresh'] = ds2.relT
-    ds['intensity_max_relThreshNorm'] = ds2.relTN
     ds['intensity_max_abs'] = ds2.mabs
     var = relThresh_group.map(group_function, args=[np.var], dim='event') 
     ds['intensity_var_relThresh'] = xr.ufuncs.sqrt(var) 
@@ -251,27 +249,34 @@ def mhw_ds(ds, ts, thresh, seas):
     var = abs_group.map(group_function, args=[np.var], dim='event') 
     ds['intensity_var_abs'] = xr.ufuncs.sqrt(var) 
     ds['intensity_cumulative'] = abs_group.map(group_function, args=[np.sum], dim='event')
-    return ds #, relSeas, relThresh, relThreshNorm, mhw_abs
+    # Add categories to dataset
+    ds = categories(ds, relThreshNorm)
+    return ds 
 
-def categories():
+def categories(ds, relThreshNorm):
     # define categories
-    categories = np.array(['Moderate', 'Strong', 'Severe', 'Extreme'])
+    categories = {0: 'Moderate', 1: 'Strong', 2: 'Severe', 3: 'Extreme'}
     # Fix categories
-    relThreshNorm_group = mhw_relThreshNorm.groupby('start') 
-    #index_peakCat = relThreshNorm_group.argmax()
-    cats = xr.ufuncs.floor(1. + mhw_relThreshNorm)
-    #category = categories[ cats[index_peakCat].apply(cat_min) ]
-    duration_moderate = np.sum(cats == 1.)
-    duration_strong = np.sum(cats == 2.)
-    duration_severe = np.sum(cats == 3.)
-    duration_extreme = np.sum(cats >= 4.)
+    relThreshNorm_group = relThreshNorm.groupby('cell') 
+    index_peakCat = relThreshNorm_group.map(group_function, args=[np.argmax], dim='event')
+    cats = xr.ufuncs.floor(1. + relThreshNorm)
+    cat_index = cats.groupby('cell').map(group_function, args=[index_cat], dim='event')
+    ds['category'] = xr.zeros_like(cat_index).astype(str)
+    for k,v in categories.items():
+        ds['category'] = xr.where(cat_index == k, v, ds['category'])
 
+    # calculate duration of each category
+    ds['duration_moderate'] = cats.groupby('cell').map(group_function, args=[cat_duration],farg=1, dim='event')
+    ds['duration_strong'] = cats.groupby('cell').map(group_function, args=[cat_duration],farg=2, dim='event')
+    ds['duration_severe'] = cats.groupby('cell').map(group_function, args=[cat_duration],farg=3, dim='event')
+    ds['duration_extreme'] = cats.groupby('cell').map(group_function, args=[cat_duration],farg=4, dim='event')
     # define stats
-    
-    return mhw
+    return ds
 
-def group_function(array, func, dim='event'):
+def group_function(array, func, farg=None, dim='event'):
     """ Run function on array after groupby on event dimension """
+    if farg:
+        return array.groupby(dim).reduce(func, arg=farg)
     return array.groupby(dim).reduce(func)
 
 def get_peak(ds, variables, dim='event'):
@@ -286,10 +291,17 @@ def get_peak(ds, variables, dim='event'):
         ds2.reindex_like(ds.peak)
     return ds2
 
-def cat_min(array, axis):
+def index_cat(array, axis):
+    """ Get array maximum and return minimum between peak and 4 , minus 1
+        to index category
     """
+    peak = np.max(array)
+    return np.min([peak, 4]) - 1
+
+def cat_duration(array, axis, arg=1):
+    """ Return sum for input category (cat)
     """
-    return np.min([array, 4]).astype(int) - 1
+    return np.sum(array == arg) 
 
 def join_events(events, joined):
     """ Set right value for joined events """
@@ -298,3 +310,25 @@ def join_events(events, joined):
         for s,e in joined:
             events[int(s):int(e)+1] = s
     return events
+
+def onset_decline():
+    # Rates of onset and decline
+    # Requires getting MHW strength at "start" and "end" of event (continuous: assume start/end half-day before/after first/last point)
+    if tt_start > 0:
+        mhw_relSeas_start = 0.5*(mhw_relSeas[0] + temp[tt_start-1] - clim['seas'][tt_start-1])
+        mhw['rate_onset'].append((mhw_relSeas[tt_peak] - mhw_relSeas_start) / (tt_peak+0.5))
+    else: # MHW starts at beginning of time series
+        if tt_peak == 0: # Peak is also at begining of time series, assume onset time = 1 day
+            mhw['rate_onset'].append((mhw_relSeas[tt_peak] - mhw_relSeas[0]) / 1.)
+        else:
+            mhw['rate_onset'].append((mhw_relSeas[tt_peak] - mhw_relSeas[0]) / tt_peak)
+    if tt_end < T-1:
+        mhw_relSeas_end = 0.5*(mhw_relSeas[-1] + temp[tt_end+1] - clim['seas'][tt_end+1])
+        mhw['rate_decline'].append((mhw_relSeas[tt_peak] - mhw_relSeas_end) / (tt_end-tt_start-tt_peak+0.5))
+    else: # MHW finishes at end of time series
+        if tt_peak == T-1: # Peak is also at end of time series, assume decline time = 1 day
+            mhw['rate_decline'].append((mhw_relSeas[tt_peak] - mhw_relSeas[-1]) / 1.)
+        else:
+            mhw['rate_decline'].append((mhw_relSeas[tt_peak] - mhw_relSeas[-1]) / (tt_end-tt_start-tt_peak))
+
+    return 
