@@ -17,6 +17,7 @@
 #import pytest
 
 from xmhw.helpers import land_check, add_doy, window_roll, mhw_filter, feb29 
+from xmhw.helpers import get_peak, index_cat, cat_duration, group_function 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
 import numpy.testing as nptest
@@ -48,32 +49,57 @@ def test_join_gaps():
 #(ds, maxGap):
     assert True
 
+def test_group_function():
+    # This is only testing the option where no etxra argument is passed
+    event = np.arange(20)
+    event[:3] = 1
+    event[3:10] = 2
+    event[10:] = 3 
+    a = xr.DataArray(np.arange(20), dims=["event"], coords={"event": event})
+    amax = xr.DataArray([2.,9.,19.], dims=["event"], coords={"event": [1,2,3]})
+    xrtest.assert_equal( group_function(a, np.max), amax)
+
 def test_mhw_filter(mhwfilter):
     # These tests only check on 1 D to make sure it work on 2 d add extra tests
     exceed, st, en, evs = mhwfilter
     # test with joinGaps=False
-    [start, end, events] = mhw_filter(exceed, 5, joinGaps=False)
-    xrtest.assert_equal( start, st)
-    xrtest.assert_equal( end, en)
-    xrtest.assert_equal( events, evs)
+    ds = mhw_filter(exceed, 5, joinGaps=False)
+    xrtest.assert_equal( ds.start, st)
+    xrtest.assert_equal( ds.end, en)
+    xrtest.assert_equal( ds.events, evs)
     # test with default joinGaps True and maxGaps=2, join 2nd and 3rd events
-    [start, end, events] = mhw_filter(exceed, 5)
+    ds = mhw_filter(exceed, 5)
     st[24] = np.nan
     en[17] = np.nan
     evs[18:25] = 11
-    xrtest.assert_equal( start, st)
-    xrtest.assert_equal( end, en)
-    xrtest.assert_equal( events, evs)
+    xrtest.assert_equal( ds.start, st)
+    xrtest.assert_equal( ds.end, en)
+    xrtest.assert_equal( ds.events, evs)
 
-def test_sqrt_var():
+def test_index_cat():
+    a = np.array([0,2,0,2,3,4])
+    b = np.array([0,2,0,2,3,1])
+    assert index_cat(a, 0) == 3 
+    assert index_cat(b, 0) == 2 
+
+def test_get_peak():
 #(array, axis):
     assert True
 
-def test_cat_min():
-#(array, axis):
+def test_cat_duration():
+    a = np.array([1,2,1,1,3,2,1])
+    assert cat_duration(a,arg=1) == 4  
+    assert cat_duration(a,arg=1) == 2  
+    assert cat_duration(a,arg=2) == 1  
+    assert cat_duration(a,arg=3) == 0  
+
+def test_mhw_ds():
     assert True
 
-def test_group_argmax():
+def test_categories():
+    assert True
+
+def test_join_events():
 #(array):
     assert True
 
