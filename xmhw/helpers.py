@@ -104,6 +104,7 @@ def join_gaps(ds, maxGap, tdim='time'):
     
     if len(s[tdim]) > 1 :
         pairs = set(zip(s.squeeze().values,e.squeeze().values))
+        print('initial', pairs)
         gaps = ((s - e.shift(time=1)) > maxGap + 1)
     # load first value so be set to True instead of NaN
         gaps.load()
@@ -115,7 +116,21 @@ def join_gaps(ds, maxGap, tdim='time'):
         s = s.where(gaps, drop=True)
     # use "gaps_shifted" to select end indexes and duration to keep
         e = e.where(gaps_shifted, drop=True)
-        joined = set(zip(s.squeeze().values,e.squeeze().values)) - pairs
+        joined = set()
+        print('len and shape for s', len(s), s.shape)
+        print('s values', s.values)
+        if len(s) < len(ds.start):
+            if len(s) > 1:
+                joined = set(zip(s.squeeze().values,e.squeeze().values)) - pairs
+                print('len >1', joined)
+            # if on;y one element can't use zip 
+            elif s.shape == (1,):
+                joined = set([(s.values[0],e.values[0])]) - pairs
+                print('shape == (1,)', joined)
+            # need to add this to work with pytest
+            elif s.shape == (1,1):
+                joined = set([(s[0].values[0], e[0].values[0])]) - pairs
+                print('shape == (1,1)', joined)
     # reindex so we have a complete time axis
         ds['start'] = s.reindex_like(ds.start)
         ds['end'] = e.reindex_like(ds.end)
