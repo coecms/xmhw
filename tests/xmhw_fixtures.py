@@ -53,17 +53,17 @@ def clim_oisst_nosmooth():
     ds = xr.open_dataset(oisst_clim_nosmooth)
     return ds 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def oisst_doy():
     a = np.arange(1,367)
     b = np.delete(a,[59])
     return np.concatenate((b,a)) 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def tstack():
     return np.array([ np.nan, 16.99, 17.39, 16.99, 17.39, 17.3 , 17.39, 17.3 , np.nan])
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def mhwfilter():
     a = [0,1,1,1,1,1,0,0,1,1,0,1,1,1,1,1,1,1,0,0,1,1,1,1,1,0,0,0,0]
     time =  pd.date_range('2001-01-01', periods=len(a))
@@ -82,4 +82,11 @@ def mhwfilter():
     events[1:6] = 1
     events[11:18] = 11
     events[20:25] =20 
-    return (exceed, st, end, events) 
+    st2 = st.copy()
+    end2 = end.copy()
+    events2 = events.copy()
+    st2[24] = np.nan
+    end2[17] = np.nan
+    events2[18:25] = 11
+    return (exceed, st, end, events, st2, end2, events2) 
+

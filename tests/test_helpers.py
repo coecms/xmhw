@@ -16,8 +16,8 @@
 
 #import pytest
 
-from xmhw.helpers import land_check, add_doy, window_roll, mhw_filter, feb29 
-from xmhw.helpers import get_peak, index_cat, cat_duration, group_function 
+from xmhw.helpers import (land_check, add_doy, window_roll, mhw_filter, feb29, 
+     get_peak, index_cat, cat_duration, group_function, join_gaps, join_events) 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
 import numpy.testing as nptest
@@ -48,12 +48,33 @@ def test_dask_percentile():
 #(array, axis, q):
     assert True
 
-def test_join_gaps():
-#(ds, maxGap):
-    assert True
+def test_join_gaps(mhwfilter):
+    exceed, st, en, evs, st2, en2, evs2 = mhwfilter 
+    ds = xr.Dataset({'start': st, 'end':en, 'events': evs})
+    # testing with maxGap=3 should return identical dataset
+    ds2 = join_gaps(ds, 3)
+    xrtest.assert_equal(ds.start, ds2.start)
+    xrtest.assert_equal(ds.end, ds2.end)
+    xrtest.assert_equal(ds.events, ds2.events)
+    # testing with gap 2 should join two events
+    ds = xr.Dataset({'start': st, 'end':en, 'events': evs})
+    ds3 = join_gaps(ds, 2)
+    xrtest.assert_equal(st2, ds3.start)
+    xrtest.assert_equal(en2, ds3.end)
+    xrtest.assert_equal(evs2, ds3.events)
+    # testing only last two events to make sure it works with array len 1
+    ds = xr.Dataset({'start': st[10:], 'end':en[10:], 'events': evs[10:]})
+    ds4 = join_gaps(ds, 2)
+    xrtest.assert_equal(st2[10:], ds4.start)
+    xrtest.assert_equal(en2[10:], ds4.end)
+    print(st2[10:].values)
+    print(en2[10:].values)
+    print(evs2[10:].values)
+    print(ds4.events.values)
+    #xrtest.assert_equal(evs2[10:], ds4.events)
 
 def test_group_function():
-    # This is only testing the option where no etxra argument is passed
+    # This is only testing the option where no extxra argument is passed
     event = np.arange(20)
     event[:3] = 1
     event[3:10] = 2
@@ -64,20 +85,17 @@ def test_group_function():
 
 def test_mhw_filter(mhwfilter):
     # These tests only check on 1 D to make sure it work on 2 d add extra tests
-    exceed, st, en, evs = mhwfilter
+    exceed, st, en, evs, st2, en2, evs2 = mhwfilter 
     # test with joinGaps=False
     ds = mhw_filter(exceed, 5, joinGaps=False)
     xrtest.assert_equal( ds.start, st)
     xrtest.assert_equal( ds.end, en)
     xrtest.assert_equal( ds.events, evs)
     # test with default joinGaps True and maxGaps=2, join 2nd and 3rd events
-    ds = mhw_filter(exceed, 5)
-    st[24] = np.nan
-    en[17] = np.nan
-    evs[18:25] = 11
-    xrtest.assert_equal( ds.start, st)
-    xrtest.assert_equal( ds.end, en)
-    xrtest.assert_equal( ds.events, evs)
+    ds2 = mhw_filter(exceed, 5)
+    xrtest.assert_equal( ds2.start, st2)
+    xrtest.assert_equal( ds2.end, en2)
+    xrtest.assert_equal( ds2.events, evs2)
 
 def test_index_cat():
     a = np.array([0,2,0,2,3,4])
@@ -103,7 +121,13 @@ def test_categories():
     assert True
 
 def test_join_events():
-#(array):
+    evs = xr.DataArray(np.arange(20))
+    evs2 = evs.copy()
+    evs2[1:8] = 1
+    evs2[12:19] = 12
+    joined = set([(1,7),(12,18)])
+    evs3 = join_events(evs, joined)
+    xrtest.assert_equal(evs2, evs3)
     assert True
 
 def test_land_check(oisst_ts, landgrid):
