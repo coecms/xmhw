@@ -63,15 +63,11 @@ def test_join_gaps(mhwfilter):
     xrtest.assert_equal(en2, ds3.end)
     xrtest.assert_equal(evs2, ds3.events)
     # testing only last two events to make sure it works with array len 1
-    ds = xr.Dataset({'start': st[10:], 'end':en[10:], 'events': evs[10:]})
+    ds.start[5] = np.nan
+    ds.end[5] = np.nan
+    ds.events[1:6] = np.nan
     ds4 = join_gaps(ds, 2)
-    xrtest.assert_equal(st2[10:], ds4.start)
-    xrtest.assert_equal(en2[10:], ds4.end)
-    print(st2[10:].values)
-    print(en2[10:].values)
-    print(evs2[10:].values)
-    print(ds4.events.values)
-    #xrtest.assert_equal(evs2[10:], ds4.events)
+    xrtest.assert_equal(evs2[10:], ds4.events[10:])
 
 def test_group_function():
     # This is only testing the option where no extxra argument is passed
