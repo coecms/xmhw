@@ -16,7 +16,7 @@
 
 #import pytest
 
-from xmhw.helpers import (land_check, add_doy, window_roll, mhw_filter, feb29, 
+from xmhw.helpers import (land_check, add_doy, window_roll, runavg, mhw_filter, feb29, 
      get_peak, index_cat, cat_duration, group_function, join_gaps, join_events) 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
@@ -35,8 +35,11 @@ def test_feb29(oisst_ts):
     nptest.assert_almost_equal(a, b[1,2], decimal=5) 
 
 def test_runavg():
-#(ts, w):
-    assert True
+    a = xr.DataArray([1,2,2,4,3,2], dims=['doy'], coords=[np.array([1,2,3,4,5,6])])
+    b = runavg(a, 3)
+    nptest.assert_almost_equal(b.values, np.array([1.66667, 1.66667, 2.66667, 3., 3., 2.]), decimal=5)
+    c = runavg(a, 5)
+    nptest.assert_almost_equal(c.values, np.array([2. , 2.2, 2.4, 2.6, 2.4, 2.4]), decimal=5)
 
 def test_window_roll(oisst_ts, tstack):
     ts = oisst_ts.sel(time=slice('2003-01-01','2003-01-03'),lat=-42.625, lon=148.125)
