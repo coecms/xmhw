@@ -298,8 +298,7 @@ def get_peak(ds, variables, dim='event'):
         val = [ds[v][np.int(x)] for x in peak.values]
         ds2[v] = peak.copy()
         ds2[v][:] = val
-        ds2.reindex_like(ds.peak)
-    return ds2
+    return ds2.reindex_like(ds)
 
 def index_cat(array, axis):
     """ Get array maximum and return minimum between peak and 4 , minus 1
