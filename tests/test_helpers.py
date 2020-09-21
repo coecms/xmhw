@@ -100,8 +100,15 @@ def test_index_cat():
     assert index_cat(b, 0) == 2 
 
 def test_get_peak():
-#(array, axis):
-    assert True
+    evs = np.array([np.nan,1,1,1,1,1,np.nan,np.nan,2,2,2,2,np.nan,3,3,3,
+                   np.nan, 4,4,4,4,4, np.nan])
+    a = xr.DataArray(np.arange(23), dims=['evs'], coords=[evs])
+    b = a + 0.5
+    peak = xr.DataArray([3,8,np.nan,18], dims=['ev'], coords=[np.array([1,2,3,4])])
+    ds =xr.Dataset({'a': a, 'b':b, 'peak': peak})
+    peaks = get_peak(ds, ['a','b'], dim='ev')
+    nptest.assert_equal(peaks['a'].values, np.array([3,8,np.nan,18])) 
+    nptest.assert_equal(peaks['b'].values, np.array([3.5,8.5,np.nan,18.5])) 
 
 def test_cat_duration():
     a = np.array([1,2,1,1,3,2,1])
