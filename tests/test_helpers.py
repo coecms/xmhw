@@ -137,8 +137,12 @@ def test_join_events():
     assert True
 
 def test_land_check(oisst_ts, landgrid):
-    # should add test with timeseries with different dimension names
     newts = land_check(oisst_ts)
     assert newts.shape == (731, 12)
+    # should add test with timeseries with different dimension names
+    diffdim = oisst_ts.rename({'lat': 'a', 'lon': 'b', 'time': 'c'})
+    newts = land_check(diffdim, tdim='c')
+    assert newts.shape == (731, 12)
+    
     with pytest.raises(XmhwException):
         land_check(landgrid)

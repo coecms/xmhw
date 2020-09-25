@@ -41,28 +41,28 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
 
     Options:
 
-      tdim                   Time dimension name, default='time'
-      climatologyPeriod      Period over which climatology is calculated, specified
+      tdim                   String: time dimension name, default='time'
+      climatologyPeriod      List of integers: period over which climatology is calculated, specified
                              as list of start and end years. Default is to calculate
                              over the full range of years in the supplied time series.
                              Alternate periods suppled as a list e.g. [1983,2012].
-      pctile                 Threshold percentile (%) for detection of extreme values
+      pctile                 Integer: threshold percentile (%) for detection of extreme values
                              (DEFAULT = 90)
-      windowHalfWidth        Width of window (one sided) about day-of-year used for
+      windowHalfWidth        Integer: width of window (one sided) about day-of-year used for
                              the pooling of values and calculation of threshold percentile
                              (DEFAULT = 5 [days])
-      smoothPercentile       Boolean switch indicating whether to smooth the threshold
+      smoothPercentile       Boolean: switch indicating whether to smooth the threshold
                              percentile timeseries with a moving average (DEFAULT = True)
-      smoothPercentileWidth  Width of moving average window for smoothing threshold
-                             (DEFAULT = 31 [days])
-      maxPadLength           Specifies the maximum length [days] over which to interpolate
+      smoothPercentileWidth  Integer: width of moving average window for smoothing threshold
+                             (DEFAULT = 31 [days], should be odd number)
+      maxPadLength           Integer: specifies the maximum length [days] over which to interpolate
                              (pad) missing data (specified as nans) in input temp time series.
                              i.e., any consecutive blocks of NaNs with length greater
-                             than maxPadLength will be left as NaN. Set as an integer.
-                             (DEFAULT = False, interpolates over all missing values).
-      coldSpells             Specifies if the code should detect cold events instead of
+                             than maxPadLength will be left as NaN.
+                             (DEFAULT = None, interpolates over all missing values).
+      coldSpells             Boolean: specifies if the code should detect cold events instead of
                              heat events. (DEFAULT = False)
-      Ly                     Specifies if the length of the year is < 365/366 days (e.g. a 
+      Ly                     Boolean: specifies if the length of the year is < 365/366 days (e.g. a 
                              360 day year from a climate model). This affects the calculation
                              of the climatology. (DEFAULT = False)
     """
@@ -75,8 +75,10 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
 
     # Set climatology period, if unset use full range of available data
     if all(climatologyPeriod):
-        temp = temp.sel(time=slice(f'{climatologyPeriod[0]}-01-01',
-                                   f'{climatologyPeriod[1]}-12-31'))
+        tslice = {tdim: slice(f'{climatologyPeriod[0]}-01-01', f'{climatologyPeriod[1]}-12-31')}
+        temp = temp.sel(**tslice)
+        #temp = temp.sel(time=slice(f'{climatologyPeriod[0]}-01-01',
+        #                           f'{climatologyPeriod[1]}-12-31'))
     # return an array stacked on all dimensions excluded time
     # Land cells are removed
     # new dimensions are (time,cell)
@@ -139,7 +141,7 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
 
     return clim
 
-def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=False, coldSpells=False): 
+def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=None, coldSpells=False, tdim='time'): 
     """
 
     Applies the Hobday et al. (2016) marine heat wave definition to an input time
@@ -168,19 +170,20 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
 
     Options:
 
-      minDuration            Minimum duration for acceptance detected MHWs
+      minDuration            Integer: minimum duration for acceptance detected MHWs
                              (DEFAULT = 5 [days])
-      joinAcrossGaps         Boolean switch indicating whether to join MHWs      
+      joinAcrossGaps         Boolean: switch indicating whether to join MHWs      
                              which occur before/after a short gap (DEFAULT = True)
       maxGap                 Maximum length of gap allowed for the joining of MHWs
                              (DEFAULT = 2 [days])
-      maxPadLength           Specifies the maximum length [days] over which to interpolate
+      maxPadLength           Integer: specifies the maximum length [days] over which to interpolate
                              (pad) missing data (specified as nans) in input temp time series.
                              i.e., any consecutive blocks of NaNs with length greater
-                             than maxPadLength will be left as NaN. Set as an integer.
-                             (DEFAULT = False, interpolates over all missing values).
-      coldSpells             Specifies if the code should detect cold events instead of
+                             than maxPadLength will be left as NaN.
+                             (DEFAULT = None, interpolates over all missing values, boolean).
+      coldSpells             Boolean: specifies if the code should detect cold events instead of
                              heat events. (DEFAULT = False)
+      tdim                   String: name of time dimension. (DEFAULT='time')
     """
   
    
@@ -206,8 +209,8 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
     exceed_bool = exceed_bool.chunk(chunks={tdim: -1})
 
     # Find all MHW events of duration >= minDuration   
-    ds = mhw_filter(exceed_bool, minDuration, joinAcrossGaps, maxGap)
+    ds = mhw_filter(exceed_bool, minDuration, joinAcrossGaps, maxGap, tdim=tdim)
     # Save mhw characteristic in dataset still working on this 
-    mhw = mhw_ds(ds, ts, thresh, seas)
+    mhw = mhw_ds(ds, ts, thresh, seas, tdim=tdim)
     
     return   mhw
