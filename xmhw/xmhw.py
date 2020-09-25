@@ -128,7 +128,7 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     thresh_climYear.name = 'threshold'
     seas_climYear.name = 'seasonal'
     # Save vector indicating which points in temp are missing values
-    missing = xr.ufuncs.isnan(ts)
+    missing = np.isnan(ts)
     # Set all remaining missing temp values equal to the climatology
     #seas_climYear = xr.where(missing, ts, seas_climYear)
 
