@@ -40,6 +40,8 @@ def test_runavg():
     nptest.assert_almost_equal(b.values, np.array([1.66667, 1.66667, 2.66667, 3., 3., 2.]), decimal=5)
     c = runavg(a, 5)
     nptest.assert_almost_equal(c.values, np.array([2. , 2.2, 2.4, 2.6, 2.4, 2.4]), decimal=5)
+    with pytest.raises(XmhwException):
+        runavg(a, 2)
 
 def test_window_roll(oisst_ts, tstack):
     ts = oisst_ts.sel(time=slice('2003-01-01','2003-01-03'),lat=-42.625, lon=148.125)
@@ -136,13 +138,15 @@ def test_join_events():
     xrtest.assert_equal(evs2, evs3)
     assert True
 
-def test_land_check(oisst_ts, landgrid):
+def test_land_check(oisst_ts, clim_oisst, landgrid):
     newts = land_check(oisst_ts)
     assert newts.shape == (731, 12)
     # should add test with timeseries with different dimension names
     diffdim = oisst_ts.rename({'lat': 'a', 'lon': 'b', 'time': 'c'})
     newts = land_check(diffdim, tdim='c')
     assert newts.shape == (731, 12)
+    newts = land_check(clim_oisst.thresh1)
+    assert newts.shape == (366, 1)
     
     with pytest.raises(XmhwException):
         land_check(landgrid)

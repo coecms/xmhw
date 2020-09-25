@@ -67,9 +67,7 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
                              of the climatology. (DEFAULT = False)
     """
 
-    # check window widths are odd
-    if windowHalfWidth%2 == 0:
-        raise XmhwException("windowHalfWidth should be odd")
+    # check smooth percentile window width is odd
     if smoothPercentileWidth%2 == 0:
         raise XmhwException("smoothPercentileWidth should be odd")
 
@@ -188,6 +186,10 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
   
    
     
+    # check maxGap < minDuration 
+    if maxGap >= minDuration:
+        raise XmhwException("Maximum gap between mhw events should be smaller than event minimum duration")
+
     ts = land_check(temp)
     thresh = land_check(thresh)
     seas = land_check(seas)
