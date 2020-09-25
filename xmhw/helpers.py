@@ -169,7 +169,6 @@ def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2, tdim='time'):
     # select only cells where shifted is less equal to the -minDuration,
     duration = events_map.where(shifted <= -minDuration)
     # from arange select where mhw duration, this will the index of last day of mhw  
-    #end = arange.where( ~xr.ufuncs.isnan(duration))
     end = arange.where( ~np.isnan(duration))
     # removing duration from end index gives starting index
     start = (end - duration + 1)
@@ -227,7 +226,6 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     ds['event'].assign_coords({tdim: ds[tdim]})
 
     # get temp, climatologies values for events
-    #ismhw = ~xr.ufuncs.isnan(ds.events)
     ismhw = ~np.isnan(ds.events)
     mhw_temp = ts.where(ismhw)
     #temp_mhw.coords['event'] = events
@@ -250,7 +248,6 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     ds['intensity_max'] = relSeas_group.map(group_function, args=[np.max], dim='event')
     ds['intensity_mean'] = relSeas_group.map(group_function, args=[np.mean], dim='event') 
     var = relSeas_group.map(group_function, args=[np.var], dim='event') 
-    #ds['intensity_var'] = xr.ufuncs.sqrt(var) 
     ds['intensity_var'] = np.sqrt(var) 
     ds['intensity_cumulative'] = relSeas_group.map(group_function, args=[np.sum], dim='event')
     # stats for 
@@ -262,14 +259,12 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     ds['intensity_max_relThresh'] = ds2.relT
     ds['intensity_max_abs'] = ds2.mabs
     var = relThresh_group.map(group_function, args=[np.var], dim='event') 
-    #ds['intensity_var_relThresh'] = xr.ufuncs.sqrt(var) 
     ds['intensity_var_relThresh'] = np.sqrt(var) 
     ds['intensity_cumulative_relThresh'] = relThresh_group.map(group_function, args=[np.sum], dim='event')
     # abs stats
     abs_group = mhw_abs.groupby('cell')
     ds['intensity_mean_abs'] = abs_group.map(group_function, args=[np.mean], dim='event') 
     var = abs_group.map(group_function, args=[np.var], dim='event') 
-    #ds['intensity_var_abs'] = xr.ufuncs.sqrt(var) 
     ds['intensity_var_abs'] = np.sqrt(var) 
     ds['intensity_cumulative'] = abs_group.map(group_function, args=[np.sum], dim='event')
     # Add categories to dataset
@@ -282,7 +277,7 @@ def categories(ds, relThreshNorm):
     # Fix categories
     relThreshNorm_group = relThreshNorm.groupby('cell') 
     index_peakCat = relThreshNorm_group.map(group_function, args=[np.argmax], dim='event')
-    cats = xr.ufuncs.floor(1. + relThreshNorm)
+    cats = np.floor(1. + relThreshNorm)
     cat_index = cats.groupby('cell').map(group_function, args=[index_cat], dim='event')
     ds['category'] = xr.zeros_like(cat_index).astype(str)
     for k,v in categories.items():
