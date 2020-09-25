@@ -40,7 +40,7 @@ def add_doy(ts, tdim="time"):
     # add extra day if not leap year and march or later
     doy = doy_original + (not_leap_year & march_or_later)
     # rechunk and return new doy as coordinate of the "t" input variable
-    ts.coords['doy'] = doy.chunk({'time': -1})
+    ts.coords['doy'] = doy.chunk({tdim: -1})
     return ts
 
 
@@ -73,7 +73,8 @@ def window_roll(ts, w, tdim):
     """Return all values falling in -w/+w window from each value in array"""
     
     width = 2*w+1
-    trolled = ts.rolling(time=width, center=True).construct('wdim')
+    dtime = {tdim: width}
+    trolled = ts.rolling(**dtime, center=True).construct('wdim')
     return trolled.stack(z=('wdim', tdim))#.reset_index('z')
 
 
@@ -104,13 +105,16 @@ def join_gaps(ds, maxGap, tdim='time'):
     
     if len(s[tdim]) > 1 :
         pairs = set(zip(s.squeeze().values,e.squeeze().values))
-        gaps = ((s - e.shift(time=1)) > maxGap + 1)
-    # load first value so be set to True instead of NaN
-        gaps.load()
-        gaps[0] = True 
+        tplus1 = {tdim: 1}
+        tminus1 = {tdim: -1}
+        eshift = e.shift(**tplus1).load()
+        # by setting first value to -(maxGap+1) then gaps[0] will always be True
+        # in this way we avoid a comparison with Nan and retain first start
+        eshift[0] = -(maxGap + 1)
+        gaps = ((s - eshift) > maxGap + 1)
         
     # shift back gaps series
-        gaps_shifted = gaps.shift(time=-1)
+        gaps_shifted = gaps.shift(**tminus1)
     # use "gaps" to select start indexes to keep
         s = s.where(gaps, drop=True)
     # use "gaps_shifted" to select end indexes and duration to keep
@@ -135,7 +139,7 @@ def join_gaps(ds, maxGap, tdim='time'):
     return ds
 
 
-def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2):
+def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2, tdim='time'):
     """ Filter events of consecutive days above threshold which are longer then minDuration
         ts - timeseries
         exceed_bool - boolean array with True values where ts >= threshold value for same dayofyear
@@ -144,26 +148,29 @@ def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2):
     # Build an array with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
     # this could be calculated only once for all lat/lon points 
-    a = np.arange(len(exceed.time))
-    arange = xr.ones_like(exceed) * xr.DataArray(a, coords=[exceed.time], dims=['time'])
+    a = np.arange(len(exceed[tdim]))
+    arange = xr.ones_like(exceed) * xr.DataArray(a, coords=[exceed[tdim]], dims=[tdim])
     # Build another array where the the 1st index of a succession of Trues is propagated (is actually the index before a True?)
     # while False points retain their positional indexes
     # events = [0,1,2,3,3,3,3,3,3,9,10,...]
-    events = (arange.where(~exceed).ffill(dim='time')).fillna(0)
+    events = (arange.where(~exceed).ffill(dim=tdim)).fillna(0)
     # by removing the 2nd array from the 1st we get 1/2/3/4 ... counter for each mhw and 0 elsewhere
     # events_map = [0,0,0,0,1,2,3,4,5,0,0,...]
     events_map = arange - events
     # removing the series shifted by 1 place to the right from itself we're left with only the last day of the mhw having a negative counter
     # this is also indicative of the duration of the event, the series is then shifted back one place to the left and the boundaries nan are replaced with zeros 
     # shifted = [nan,0,0,0,1,1,1,1,-5,0,0,...]
-    shifted = (events_map - events_map.shift(time=1)).shift(time=-1)
+    tplus1 = {tdim: 1}
+    tminus1 = {tdim: -1}
+    shifted = (events_map - events_map.shift(**tplus1)).shift(**tminus1)
 
     shifted.load()
     shifted[-1,:] = -events_map[-1,:]
     # select only cells where shifted is less equal to the -minDuration,
     duration = events_map.where(shifted <= -minDuration)
     # from arange select where mhw duration, this will the index of last day of mhw  
-    end = arange.where( ~xr.ufuncs.isnan(duration))
+    #end = arange.where( ~xr.ufuncs.isnan(duration))
+    end = arange.where( ~np.isnan(duration))
     # removing duration from end index gives starting index
     start = (end - duration + 1)
 
@@ -175,15 +182,15 @@ def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2):
     sel_events.name = 'events'
 
     # if joinAcross Gaps call join_gaps function, this will update start, end and mappings of events
-    ds = xr.Dataset({'start': start, 'end': end, 'events': sel_events}).chunk({'time':-1,'cell':1})
+    ds = xr.Dataset({'start': start, 'end': end, 'events': sel_events}).chunk({tdim:-1,'cell':1})
     if joinGaps:
-        ds = ds.groupby('cell').map(join_gaps, args=[maxGap], tdim='time')
+        ds = ds.groupby('cell').map(join_gaps, args=[maxGap], tdim=tdim)
     # transpose dataset so order of coordinates is the same as other arrays
-        ds = ds.transpose('time', 'cell')
+        ds = ds.transpose(tdim, 'cell')
 
     # set this aside for the moment
     # recreate start arrays with start of events on correct time and not on end time
-    #st_idx = start.dropna(dim='time').astype(int).values 
+    #st_idx = start.dropna(dim=tdim).astype(int).values 
     #start2 = xr.full_like(start, np.nan)
     #start2[st_idx] = st_idx
     #starts[0,st_idx] = st_idx
@@ -208,17 +215,20 @@ def land_check(temp, tdim='time'):
         raise XmhwException('All points of grid are either land or NaN')
     return ts
 
-def mhw_ds(ds, ts, thresh, seas):
+def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     """ Calculate and add to dataset mhw properties
     """
     #date_start = ts.time.isel(time=start.values)
     #date_end = ts.time.isel(time=end.values)
     # assign event coordinate to dataset
     ds = ds.assign_coords({'event': ds.events})
-    ds['event'].assign_coords({'time': ds.time})
+    #  Would calling this new dimension 'time' regardless of tdim create issues?
+    #ds['event'].assign_coords({'time': ds[tdim]})
+    ds['event'].assign_coords({tdim: ds[tdim]})
 
     # get temp, climatologies values for events
-    ismhw = ~xr.ufuncs.isnan(ds.events)
+    #ismhw = ~xr.ufuncs.isnan(ds.events)
+    ismhw = ~np.isnan(ds.events)
     mhw_temp = ts.where(ismhw)
     #temp_mhw.coords['event'] = events
     mhw_seas = xr.where(ismhw, seas.sel(doy=ismhw.doy.values).values, np.nan)
@@ -232,7 +242,7 @@ def mhw_ds(ds, ts, thresh, seas):
     mhw_abs = mhw_temp
 
     # Find anomaly peak for events 
-    relSeas = relSeas.chunk({'time':-1, 'cell':1})
+    relSeas = relSeas.chunk({tdim:-1, 'cell':1})
     relSeas_group = relSeas.groupby('cell')  
     # this operation changes also the 'event' dimension reducing it to the actual number of events across all cells
     relSeas_argmax = relSeas_group.map(group_function, args=[np.argmax], dim='event')
@@ -240,10 +250,11 @@ def mhw_ds(ds, ts, thresh, seas):
     ds['intensity_max'] = relSeas_group.map(group_function, args=[np.max], dim='event')
     ds['intensity_mean'] = relSeas_group.map(group_function, args=[np.mean], dim='event') 
     var = relSeas_group.map(group_function, args=[np.var], dim='event') 
-    ds['intensity_var'] = xr.ufuncs.sqrt(var) 
+    #ds['intensity_var'] = xr.ufuncs.sqrt(var) 
+    ds['intensity_var'] = np.sqrt(var) 
     ds['intensity_cumulative'] = relSeas_group.map(group_function, args=[np.sum], dim='event')
     # stats for 
-    relThresh = relThresh.chunk({'time':-1, 'cell':1})
+    relThresh = relThresh.chunk({tdim:-1, 'cell':1})
     relThresh_group = relThresh.groupby('cell') 
     dsdict = {'peak': ds.index_peak, 'relT': relThresh, 'mabs': mhw_abs}
     ds2 = xr.Dataset(dsdict).groupby('cell').map(get_peak, 
@@ -251,13 +262,15 @@ def mhw_ds(ds, ts, thresh, seas):
     ds['intensity_max_relThresh'] = ds2.relT
     ds['intensity_max_abs'] = ds2.mabs
     var = relThresh_group.map(group_function, args=[np.var], dim='event') 
-    ds['intensity_var_relThresh'] = xr.ufuncs.sqrt(var) 
+    #ds['intensity_var_relThresh'] = xr.ufuncs.sqrt(var) 
+    ds['intensity_var_relThresh'] = np.sqrt(var) 
     ds['intensity_cumulative_relThresh'] = relThresh_group.map(group_function, args=[np.sum], dim='event')
     # abs stats
     abs_group = mhw_abs.groupby('cell')
     ds['intensity_mean_abs'] = abs_group.map(group_function, args=[np.mean], dim='event') 
     var = abs_group.map(group_function, args=[np.var], dim='event') 
-    ds['intensity_var_abs'] = xr.ufuncs.sqrt(var) 
+    #ds['intensity_var_abs'] = xr.ufuncs.sqrt(var) 
+    ds['intensity_var_abs'] = np.sqrt(var) 
     ds['intensity_cumulative'] = abs_group.map(group_function, args=[np.sum], dim='event')
     # Add categories to dataset
     ds = categories(ds, relThreshNorm)
