@@ -15,23 +15,16 @@
 # limitations under the License.
 
 
-from xmhw.xmhw import threshold #, detect, mhw_filter 
+from xmhw.xmhw import threshold, detect 
 from xmhw_fixtures import *
 from numpy import testing as nptest
 from xmhw.exception import XmhwException
 
-def test_mhw_filter():
-#mhw_filter(exceed, minDuration, joinGaps, maxGap):
-    assert True
 
 def test_threshold(clim_oisst, clim_oisst_nosmooth, oisst_ts):
-    #threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5, smoothPercentile=True, 
     # test exceptions with wrong arguments
     with pytest.raises(XmhwException):
         clim = threshold(oisst_ts, smoothPercentileWidth=6)
-    with pytest.raises(XmhwException):
-        clim = threshold(oisst_ts, windowHalfWidth=6)
-    #threshold(temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5, smoothPercentile=True, 
     clim = threshold(oisst_ts, smoothPercentile=False)
     th1 = clim['thresh'].sel(lat=-42.625, lon=148.125)
     seas1 = clim['seas'].sel(lat=-42.625, lon=148.125)
@@ -53,16 +46,11 @@ def test_threshold(clim_oisst, clim_oisst_nosmooth, oisst_ts):
     nptest.assert_array_almost_equal(clim_oisst.thresh2[82:].values,th2[82:].values) 
     nptest.assert_array_almost_equal(clim_oisst.seas1[82:].values,seas1[82:].values, decimal=4) 
     nptest.assert_array_almost_equal(clim_oisst.seas2[82:].values,seas2[82:].values, decimal=4) 
+    # add test with 1-dimensional and/or 2-dimensional arrays to make sure it still works 
 
-def test_detect():
-    assert True
-#detect(temp, clim=None, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=False, coldSpells=False, 
+def test_detect(oisst_ts, clim_oisst):
+# detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=None, coldSpells=False, tdim='time')
+    # test exceptions with wrong arguments
+    with pytest.raises(XmhwException):
+        mhw = detect(oisst_ts, clim_oisst.thresh2, clim_oisst.seas2, minDuration=3, maxGap=5)
 
-
-def test_detect():
-    assert True
-#detect(temp, clim=None, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=False, coldSpells=False, 
-
-def test_mhw_ds():
-#mhw_ds(start, end, events, ts, clim):
-    assert True

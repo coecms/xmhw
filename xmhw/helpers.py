@@ -65,7 +65,8 @@ def runavg(ts, w):
     Return:
       ts_smooth     Smoothed time series
     """
-
+    if w%2 == 0:
+        raise XmhwException("Running average window should be odd")
     return ts.pad(doy=(w-1)//2, mode='wrap').rolling(doy=w, center=True).mean().dropna(dim='doy')
 
 
@@ -204,8 +205,11 @@ def land_check(temp, tdim='time'):
         ts - modified timeseries with stacked lat/lon and land points removed  
     """
     dims = list(temp.dims)
+    # add an extra fake dimensions if array 1-dimensional so a 'cell' dimension can still be created
     dims.remove(tdim)
-    #ts = temp.stack(cell=('lat','lon'))
+    if len(dims) == 0:
+        temp = temp.expand_dims({'point': [0.]})
+        dims = ['point']
     ts = temp.stack(cell=(dims))
     # drop cells that have all nan values along time
     ts = ts.dropna(dim='cell',how='all')
