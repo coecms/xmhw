@@ -235,6 +235,8 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     #temp_mhw.coords['event'] = events
     mhw_seas = xr.where(ismhw, seas.sel(doy=ismhw.doy.values).values, np.nan)
     mhw_thresh = xr.where(ismhw, thresh.sel(doy=ismhw.doy.values).values, np.nan)
+    ds['seas'] = mhw_seas
+    ds['thresh'] = mhw_thresh
     relSeas = mhw_temp - mhw_seas
     relSeas['event'] = ds.events
     relThresh = mhw_temp - mhw_thresh
@@ -242,6 +244,11 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     relThreshNorm = (mhw_temp - mhw_thresh) / (mhw_thresh - mhw_seas)
     relThreshNorm['event'] = ds.events
     mhw_abs = mhw_temp
+    ds['relThresh'] = relThresh
+    ds['relSeas'] = relSeas
+    ds['relThreshNorm'] = relThreshNorm
+    ds['abs'] = mhw_abs
+    print(relThreshNorm)
 
     # Find anomaly peak for events 
     relSeas = relSeas.chunk({tdim:-1, 'cell':1})
@@ -277,7 +284,7 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
 
 def categories(ds, relThreshNorm):
     # define categories
-    categories = {0: 'Moderate', 1: 'Strong', 2: 'Severe', 3: 'Extreme'}
+    categories = {1: 'Moderate', 2: 'Strong', 3: 'Severe', 4: 'Extreme'}
     # Fix categories
     relThreshNorm_group = relThreshNorm.groupby('cell') 
     index_peakCat = relThreshNorm_group.map(group_function, args=[np.argmax], dim='event')
@@ -317,7 +324,7 @@ def index_cat(array, axis):
         to index category
     """
     peak = np.max(array)
-    return np.min([peak, 4]) - 1
+    return np.min([peak, 4])
 
 def cat_duration(array, axis, arg=1):
     """ Return sum for input category (cat)

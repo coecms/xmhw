@@ -32,6 +32,7 @@ land = os.path.join(TESTS_DATA, "land.nc")
 # point2 lat=-41.625, lon=148.375
 oisst_clim = os.path.join(TESTS_DATA,"test_clim_oisst.nc")
 oisst_clim_nosmooth = os.path.join(TESTS_DATA,"test_clim_oisst_nosmooth.nc")
+relthreshnorm = os.path.join(TESTS_DATA, "relthreshnorm.nc")
 
 @pytest.fixture(scope="module")
 def oisst_ts():
@@ -52,6 +53,11 @@ def clim_oisst():
 def clim_oisst_nosmooth():
     ds = xr.open_dataset(oisst_clim_nosmooth)
     return ds 
+
+@pytest.fixture(scope="module")
+def dsnorm():
+    ds = xr.open_dataset(relthreshnorm)
+    return ds.stack(cell=['lat','lon']) 
 
 @pytest.fixture
 def oisst_doy():
