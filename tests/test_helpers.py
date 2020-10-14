@@ -16,8 +16,10 @@
 
 #import pytest
 
-from xmhw.helpers import (land_check, add_doy, window_roll, runavg, mhw_filter, feb29, 
-     get_peak, index_cat, cat_duration, group_function, join_gaps, join_events) 
+from xmhw.helpers import (land_check, add_doy, window_roll,
+     runavg, mhw_filter, feb29, 
+     get_peak, index_cat, cat_duration, categories,
+     group_function, join_gaps, join_events) 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
 import numpy.testing as nptest
@@ -99,10 +101,10 @@ def test_mhw_filter(mhwfilter):
     xrtest.assert_equal( ds2.events, evs2)
 
 def test_index_cat():
-    a = np.array([0,2,0,2,3,4])
-    b = np.array([0,2,0,2,3,1])
-    assert index_cat(a, 0) == 3 
-    assert index_cat(b, 0) == 2 
+    a = np.array([0,2,0,2,3,4,6])
+    b = np.array([0,2,0,2,3,1,1])
+    assert index_cat(a, 0) == 4 
+    assert index_cat(b, 0) == 3 
 
 def test_get_peak():
     evs = np.array([np.nan,1,1,1,1,1,np.nan,np.nan,2,2,2,2,np.nan,3,3,3,
@@ -125,8 +127,18 @@ def test_cat_duration():
 def test_mhw_ds():
     assert True
 
-def test_categories():
-    assert True
+def test_categories(dsnorm):
+    ds = categories(dsnorm, dsnorm['relThreshNorm'])
+    nptest.assert_array_equal(ds['category'][0,:], np.array(['Moderate', '0.0',
+           'Strong', '0.0', 'Moderate', 'Moderate', 'Strong', '0.0', '0.0'])) 
+    nptest.assert_array_equal( ds['duration_moderate'][0,:], np.array([5., np.nan,
+                               2., np.nan,  5.,  5., 16., np.nan, np.nan]))
+    nptest.assert_array_equal( ds['duration_strong'][0,:], np.array([0., np.nan,
+                               3., np.nan,  0.,  0., 1., np.nan, np.nan]))
+    nptest.assert_array_equal( ds['duration_severe'][0,:], np.array([0., np.nan,
+                               0., np.nan,  0.,  0., 0., np.nan, np.nan]))
+    nptest.assert_array_equal( ds['duration_extreme'][0,:], np.array([0., np.nan,
+                               0., np.nan,  0.,  0., 0., np.nan, np.nan]))
 
 def test_join_events():
     evs = xr.DataArray(np.arange(20))

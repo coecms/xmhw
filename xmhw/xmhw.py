@@ -191,8 +191,8 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
         raise XmhwException("Maximum gap between mhw events should be smaller than event minimum duration")
 
     ts = land_check(temp)
-    thresh = land_check(thresh)
-    seas = land_check(seas)
+    thresh = land_check(thresh, tdim='doy')
+    seas = land_check(seas, tdim='doy')
     # assign doy 
     ts = add_doy(ts)
 
