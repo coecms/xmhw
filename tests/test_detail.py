@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#import pytest
 
 from xmhw.detail import (group_function, index_cat, cat_duration, categories,
                          get_peak, get_rate, get_period, get_edge, onset_decline) 
@@ -74,10 +73,13 @@ def test_categories(dsnorm):
     nptest.assert_array_equal( ds['duration_extreme'][0,:], np.array([0., np.nan,
                                0., np.nan,  0.,  0., 0., np.nan, np.nan]))
 
-def test_onset(oisst_clim, oisst_ts):
-    ds = xr.Dataset.merge({'seas': oisst_clim.seas, 'ts': oisst_ts.sst})
-    ds['index_peak']
-    seas = xr.dataArray([1.2,0.56,4.5,3.4,2.1])
+
+def test_onset_decline():
+    ds = xr.Dataset()
+    ds['start_idx'] = xr.DataArray([np.nan, np.nan, np.nan], dims=['event'], coords=[np.arange(3)])
+    ds = onset_decline(ds)
+    xrtest.assert_equal(ds.start_idx, ds.rate_decline)
+    xrtest.assert_equal(ds.start_idx, ds.rate_onset)
 
 def test_get_edge():
     relSeas = xr.DataArray(np.arange(1,20))
@@ -114,3 +116,9 @@ def test_get_period():
     xrtest.assert_equal( ons, ons2 )
     xrtest.assert_equal( dec, dec2 )
 
+def test_get_rate():
+    edge = xr.DataArray([1. , 1.5, 2.5])
+    period = xr.DataArray([1, 10.5, 19.5])
+    peak = xr.DataArray([1.4, 2.4, 1.8])
+    result =  xr.DataArray([0.4, 0.08571429, -0.03589744])
+    xrtest.assert_allclose( result, get_rate(peak, edge, period))
