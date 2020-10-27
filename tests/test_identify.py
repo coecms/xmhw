@@ -16,10 +16,8 @@
 
 #import pytest
 
-from xmhw.helpers import (land_check, add_doy, window_roll,
-     runavg, mhw_filter, feb29, 
-     get_peak, index_cat, cat_duration, categories,
-     group_function, join_gaps, join_events) 
+from xmhw.identify import (land_check, add_doy, window_roll, runavg,
+                           mhw_filter, feb29, join_gaps, join_events) 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
 import numpy.testing as nptest
@@ -76,15 +74,6 @@ def test_join_gaps(mhwfilter):
     ds4 = join_gaps(ds, 2)
     xrtest.assert_equal(evs2[10:], ds4.events[10:])
 
-def test_group_function():
-    # This is only testing the option where no extxra argument is passed
-    event = np.arange(20)
-    event[:3] = 1
-    event[3:10] = 2
-    event[10:] = 3 
-    a = xr.DataArray(np.arange(20), dims=["event"], coords={"event": event})
-    amax = xr.DataArray([2.,9.,19.], dims=["event"], coords={"event": [1,2,3]})
-    xrtest.assert_equal( group_function(a, np.max), amax)
 
 def test_mhw_filter(mhwfilter):
     # These tests only check on 1 D to make sure it work on 2 d add extra tests
@@ -100,45 +89,6 @@ def test_mhw_filter(mhwfilter):
     xrtest.assert_equal( ds2.end, en2)
     xrtest.assert_equal( ds2.events, evs2)
 
-def test_index_cat():
-    a = np.array([0,2,0,2,3,4,6])
-    b = np.array([0,2,0,2,3,1,1])
-    assert index_cat(a, 0) == 4 
-    assert index_cat(b, 0) == 3 
-
-def test_get_peak():
-    evs = np.array([np.nan,1,1,1,1,1,np.nan,np.nan,2,2,2,2,np.nan,3,3,3,
-                   np.nan, 4,4,4,4,4, np.nan])
-    a = xr.DataArray(np.arange(23), dims=['evs'], coords=[evs])
-    b = a + 0.5
-    peak = xr.DataArray([3,8,np.nan,18], dims=['ev'], coords=[np.array([1,2,3,4])])
-    ds =xr.Dataset({'a': a, 'b':b, 'peak': peak})
-    peaks = get_peak(ds, ['a','b'], dim='ev')
-    nptest.assert_equal(peaks['a'].values, np.array([3,8,np.nan,18])) 
-    nptest.assert_equal(peaks['b'].values, np.array([3.5,8.5,np.nan,18.5])) 
-
-def test_cat_duration():
-    a = np.array([1,2,1,1,3,2,1])
-    assert cat_duration(a,0,arg=1) == 4  
-    assert cat_duration(a,0,arg=2) == 2  
-    assert cat_duration(a,0,arg=3) == 1  
-    assert cat_duration(a,0,arg=4) == 0  
-
-def test_mhw_ds():
-    assert True
-
-def test_categories(dsnorm):
-    ds = categories(dsnorm, dsnorm['relThreshNorm'])
-    nptest.assert_array_equal(ds['category'][0,:], np.array(['Moderate', '0.0',
-           'Strong', '0.0', 'Moderate', 'Moderate', 'Strong', '0.0', '0.0'])) 
-    nptest.assert_array_equal( ds['duration_moderate'][0,:], np.array([5., np.nan,
-                               2., np.nan,  5.,  5., 16., np.nan, np.nan]))
-    nptest.assert_array_equal( ds['duration_strong'][0,:], np.array([0., np.nan,
-                               3., np.nan,  0.,  0., 1., np.nan, np.nan]))
-    nptest.assert_array_equal( ds['duration_severe'][0,:], np.array([0., np.nan,
-                               0., np.nan,  0.,  0., 0., np.nan, np.nan]))
-    nptest.assert_array_equal( ds['duration_extreme'][0,:], np.array([0., np.nan,
-                               0., np.nan,  0.,  0., 0., np.nan, np.nan]))
 
 def test_join_events():
     evs = xr.DataArray(np.arange(20))
