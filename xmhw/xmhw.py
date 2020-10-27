@@ -20,8 +20,9 @@ import xarray as xr
 import numpy as np
 import dask
 import sys
-from .helpers import join_gaps, mhw_filter, mhw_ds, runavg, dask_percentile, window_roll
-from .helpers import land_check, feb29, add_doy 
+from .identify import (join_gaps, mhw_filter, runavg, dask_percentile, window_roll,
+                      land_check, feb29, add_doy) 
+from .detail import mhw_ds
 from .exception import XmhwException
 
 
