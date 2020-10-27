@@ -25,25 +25,18 @@ from .exception import XmhwException
 def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     """ Calculate and add to dataset mhw properties
     """
-    #date_start = ts.time.isel(time=start.values)
-    #date_end = ts.time.isel(time=end.values)
     # assign event coordinate to dataset
     ds = ds.assign_coords({'event': ds.events})
     #  Would calling this new dimension 'time' regardless of tdim create issues?
-    #ds['event'].assign_coords({'time': ds[tdim]})
     ds['event'].assign_coords({tdim: ds[tdim]})
 
     # get temp, climatologies values for events
     ismhw = ~np.isnan(ds.events)
     mhw_temp = ts.where(ismhw)
-    #temp_mhw.coords['event'] = events
     mhw_seas = xr.where(ismhw, seas.sel(doy=ismhw.doy.values).values, np.nan)
     mhw_thresh = xr.where(ismhw, thresh.sel(doy=ismhw.doy.values).values, np.nan)
-    ds['ts'] = ts
     # get difference between ts and seasonal average, needed to calculate onset and decline rates later
-    #ds['anom'] = (ts - seas.sel(doy=ts.doy)).pad({tdim:(1,2)}, constant_values=0.)
     ds['anom'] = (ts - seas.sel(doy=ts.doy))
-    print(ds.anom)
     ds['seas'] = mhw_seas
     ds['thresh'] = mhw_thresh
     relSeas = mhw_temp - mhw_seas
@@ -53,6 +46,7 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     relThreshNorm = (mhw_temp - mhw_thresh) / (mhw_thresh - mhw_seas)
     relThreshNorm['event'] = ds.events
     # this is temporary so I can test better, in theory we don't need to save these values
+    ds['ts'] = ts
     ds['relThresh'] = relThresh
     ds['relSeas'] = relSeas
     ds['relThreshNorm'] = relThreshNorm
@@ -98,6 +92,7 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     ds = ds.groupby('cell').map(onset_decline)
     return ds 
 
+
 def categories(ds, relThreshNorm):
     # define categories
     categories = {1: 'Moderate', 2: 'Strong', 3: 'Severe', 4: 'Extreme'}
@@ -115,8 +110,8 @@ def categories(ds, relThreshNorm):
     ds['duration_strong'] = cats.groupby('cell').map(group_function, args=[cat_duration],farg=2, dim='event')
     ds['duration_severe'] = cats.groupby('cell').map(group_function, args=[cat_duration],farg=3, dim='event')
     ds['duration_extreme'] = cats.groupby('cell').map(group_function, args=[cat_duration],farg=4, dim='event')
-    # define stats
     return ds
+
 
 def group_function(array, func, farg=None, dim='event'):
     """ Run function on array after groupby on event dimension """
@@ -124,11 +119,6 @@ def group_function(array, func, farg=None, dim='event'):
         return array.groupby(dim).reduce(func, arg=farg)
     return array.groupby(dim).reduce(func)
 
-def group_map(array, func, farg=None, dim='event'):
-    """ Run function on array after groupby on event dimension """
-    if farg:
-        return array.groupby(dim).map(func, arg=farg)
-    return array.groupby(dim).map(func)
 
 def get_peak(ds, variables, dim='event'):
     """ Return relThresh and relThreshNorm  where index_peak
@@ -141,12 +131,14 @@ def get_peak(ds, variables, dim='event'):
         ds2[v][:] = val
     return ds2.reindex_like(ds)
 
+
 def index_cat(array, axis):
     """ Get array maximum and return minimum between peak and 4 , minus 1
         to index category
     """
     peak = np.max(array)
     return np.min([peak, 4])
+
 
 def cat_duration(array, axis, arg=1):
     """ Return sum for input category (cat)
@@ -159,15 +151,17 @@ def get_rate(relSeas_peak, relSeas_edge, period):
     """
     return (relSeas_peak - relSeas_edge) / period
 
+
 def get_edge(relSeas, anom, idx, edge, step):
     """ Return the relative start or end of mhw to calculate respectively onset and decline 
         for onset edge = 0 step = 1, relSeas=relSeas[0]
         for decline edge = len(ts)-1 and step = -1, relSeas=relSeas[-1]
     """
     tdim = anom.dims[0]
-    anomsh = anom.shift(**{tdim: step})#[idx]#+step]
+    anomsh = anom.shift(**{tdim: step})
     x = xr.where(idx == edge, relSeas[edge], anomsh[idx])
     return 0.5*(relSeas[idx] + x)
+
 
 def get_period(start, end, peak, tsend):
     """ Return the onset/decline period for a mhw 
@@ -178,20 +172,20 @@ def get_period(start, end, peak, tsend):
     decline_period = xr.where(end == tsend, y, y + 0.5)
     return onset_period, decline_period
 
+
 def onset_decline(ds):
     """ Calculate rate of onset and decline for each MHW
     """
     start = ds.start_idx.dropna(dim='event').astype(int)
     if len(start) == 0:
         ds['rate_onset'] = ds.start_idx
-        ds['rate_decline'] = ds.end_idx
+        ds['rate_decline'] = ds.start_idx
         return ds
 
     end = ds.end_idx.dropna(dim='event').astype(int)
     peak = ds.index_peak.where(start).dropna(dim='event')
     tslen = len(ds.anom)
     onset_period, decline_period = get_period(start, end, peak, tslen)
-    # create numpy array with first an last value of relSeas as first and last and ts-seas in between
     relSeas_start = get_edge(ds.relSeas,ds.anom, start, 0, 1) 
     relSeas_end = get_edge(ds.relSeas, ds.anom, end, tslen-1, -1) 
     relSeas_peak = ds.relSeas[peak.astype(int)]
