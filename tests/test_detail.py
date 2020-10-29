@@ -122,3 +122,17 @@ def test_get_rate():
     peak = xr.DataArray([1.4, 2.4, 1.8])
     result =  xr.DataArray([0.4, 0.08571429, -0.03589744])
     xrtest.assert_allclose( result, get_rate(peak, edge, period))
+
+
+def flip_cold():
+    ds = xr.Dataset()
+    y = xr.DataArray([1., 2., np.nan], dims=['x'], coords=[np.arange(3)])
+    z = xr.DataArray([-1., -2., np.nan], dims=['x'], coords=[np.arange(3)])
+    ds['intensity_sum_dummy'] = y
+    ds['intensity_var_dummy'] = y 
+    ds['dummy'] = y 
+    ds2 = flip_cold(ds)
+    xrtest.assert_equal(ds2['intensity_sum_dummy'], z) 
+    xrtest.assert_equal(ds2['intensity_var_dummy'], y) 
+    xrtest.assert_equal(ds2['dummy'], y) 
+

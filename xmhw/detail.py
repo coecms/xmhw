@@ -86,7 +86,7 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     ds['intensity_mean_abs'] = abs_group.map(group_function, args=[np.nanmean], dim='event') 
     var = abs_group.map(group_function, args=[np.var], dim='event') 
     ds['intensity_var_abs'] = np.sqrt(var) 
-    ds['intensity_cumulative'] = abs_group.map(group_function, args=[np.sum], dim='event')
+    ds['intensity_cumulative_abs'] = abs_group.map(group_function, args=[np.sum], dim='event')
     # Add categories to dataset
     ds = categories(ds, relThreshNorm)
     ds = ds.groupby('cell').map(onset_decline)
@@ -193,4 +193,13 @@ def onset_decline(ds):
     decline_rate =  get_rate(relSeas_peak, relSeas_end, decline_period)
     ds['rate_onset'] = onset_rate.reindex_like(ds.start_idx)
     ds['rate_decline'] = decline_rate.reindex_like(ds.end_idx)
+    return ds
+
+
+def flip_cold(ds):
+    """Flip mhw intensities if cold spell
+    """
+    for varname in ds.keys():
+        if 'intensity' in varname and '_var' not in varname:
+            ds[varname] = -1*ds[varname]
     return ds

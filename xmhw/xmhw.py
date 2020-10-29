@@ -215,5 +215,8 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
     ds = mhw_filter(exceed_bool, minDuration, joinAcrossGaps, maxGap, tdim=tdim)
     # Save mhw characteristic in dataset still working on this 
     mhw = mhw_ds(ds, ts, thresh, seas, tdim=tdim)
-    
+    # Flip climatology and intensties in case of cold spell detection
+    # do I need to flip climatologies here?
+    if coldSpells:
+        mhw = flip_cold(mhw)
     return   mhw
