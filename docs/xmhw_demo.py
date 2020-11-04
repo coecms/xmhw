@@ -20,9 +20,11 @@ clim = threshold(tos)
 # Save results to netcdf file
 climds = xr.merge([clim['thresh'],clim['seas']])
 climds.to_netcdf('climds.nc')
+#climds = xr.open_dataset('climds.nc')
 
 # Identify marine heat waves
 mhw  = detect(tos, clim['thresh'], clim['seas'])
+#mhw  = detect(tos, climds['threshold'], climds['seasonal'])
 
 # unstack cell dimension to get back lat and lon
 mhwds = mhw.unstack('cell')

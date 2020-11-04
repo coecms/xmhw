@@ -22,7 +22,8 @@ import dask
 import sys
 from .identify import (join_gaps, mhw_filter, runavg, dask_percentile, window_roll,
                       land_check, feb29, add_doy) 
-from .detail import mhw_ds
+#from .detail import mhw_ds
+from .features import mhw_ds
 from .exception import XmhwException
 
 

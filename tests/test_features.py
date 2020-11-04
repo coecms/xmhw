@@ -15,8 +15,9 @@
 # limitations under the License.
 
 
-from xmhw.detail import (group_function, index_cat, cat_duration, categories,
-                         get_peak, get_rate, get_period, get_edge, onset_decline) 
+from xmhw.features import (group_function, mhw_ds, index_cat, cat_duration, categories,
+                         get_peak, get_rate, get_period, get_edge, onset_decline,
+                         mhw_features) 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
 import numpy.testing as nptest
@@ -36,8 +37,8 @@ def test_group_function():
 def test_index_cat():
     a = np.array([0,2,0,2,3,4,6])
     b = np.array([0,2,0,2,3,1,1])
-    assert index_cat(a, 0) == 4 
-    assert index_cat(b, 0) == 3 
+    assert index_cat(a) == 4 
+    assert index_cat(b) == 3 
 
 def test_get_peak():
     evs = np.array([np.nan,1,1,1,1,1,np.nan,np.nan,2,2,2,2,np.nan,3,3,3,
@@ -52,32 +53,37 @@ def test_get_peak():
 
 def test_cat_duration():
     a = np.array([1,2,1,1,3,2,1])
-    assert cat_duration(a,0,arg=1) == 4  
-    assert cat_duration(a,0,arg=2) == 2  
-    assert cat_duration(a,0,arg=3) == 1  
-    assert cat_duration(a,0,arg=4) == 0  
+    assert cat_duration(a,arg=1) == 4  
+    assert cat_duration(a,arg=2) == 2  
+    assert cat_duration(a,arg=3) == 1  
+    assert cat_duration(a,arg=4) == 0  
 
-def test_mhw_ds():
-    assert True
+def test_mhw_features():
+    # testing to check that with all-nan array calculation skipped and np.nan assigned
+    ds = xr.Dataset()
+    ds['start'] = xr.DataArray([np.nan, np.nan, np.nan], dims=['time'], coords=[np.arange(3)])
+    ds = mhw_features(ds, 'time')
+    assert np.isnan( ds.start_idx.values )
 
 def test_categories(dsnorm):
-    ds = categories(dsnorm, dsnorm['relThreshNorm'])
-    nptest.assert_array_equal(ds['category'][0,:], np.array(['Moderate', '0.0',
+    ds = categories(dsnorm.loc[{'cell': 0}], xr.Dataset())
+    nptest.assert_array_equal(ds['category'], np.array(['Moderate', '0.0',
            'Strong', '0.0', 'Moderate', 'Moderate', 'Strong', '0.0', '0.0'])) 
-    nptest.assert_array_equal( ds['duration_moderate'][0,:], np.array([5., np.nan,
+    nptest.assert_array_equal( ds['duration_moderate'], np.array([5., np.nan,
                                2., np.nan,  5.,  5., 16., np.nan, np.nan]))
-    nptest.assert_array_equal( ds['duration_strong'][0,:], np.array([0., np.nan,
+    nptest.assert_array_equal( ds['duration_strong'], np.array([0., np.nan,
                                3., np.nan,  0.,  0., 1., np.nan, np.nan]))
-    nptest.assert_array_equal( ds['duration_severe'][0,:], np.array([0., np.nan,
+    nptest.assert_array_equal( ds['duration_severe'], np.array([0., np.nan,
                                0., np.nan,  0.,  0., 0., np.nan, np.nan]))
-    nptest.assert_array_equal( ds['duration_extreme'][0,:], np.array([0., np.nan,
+    nptest.assert_array_equal( ds['duration_extreme'], np.array([0., np.nan,
                                0., np.nan,  0.,  0., 0., np.nan, np.nan]))
 
 
 def test_onset_decline():
+    # testing that with  all-nan array calculations are skipped and np.nan are assigned
     ds = xr.Dataset()
     ds['start_idx'] = xr.DataArray([np.nan, np.nan, np.nan], dims=['event'], coords=[np.arange(3)])
-    ds = onset_decline(ds)
+    ds = onset_decline(ds, ds)
     xrtest.assert_equal(ds.start_idx, ds.rate_decline)
     xrtest.assert_equal(ds.start_idx, ds.rate_onset)
 
