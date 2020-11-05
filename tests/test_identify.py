@@ -109,6 +109,9 @@ def test_land_check(oisst_ts, clim_oisst, landgrid):
     assert newts.shape == (731, 12)
     newts = land_check(clim_oisst.thresh1)
     assert newts.shape == (366, 1)
-    
+    # test exception raised when all points are land 
     with pytest.raises(XmhwException):
         land_check(landgrid)
+    # test exception raised when one of the dimension to stack has lenght 0 
+    with pytest.raises(XmhwException):
+        land_check(oisst_ts.sel(lat=slice(-41,-41.5)))

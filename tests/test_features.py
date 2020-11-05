@@ -16,8 +16,7 @@
 
 
 from xmhw.features import (group_function, mhw_ds, index_cat, cat_duration, categories,
-                         get_peak, get_rate, get_period, get_edge, onset_decline,
-                         mhw_features) 
+                           get_rate, get_period, get_edge, onset_decline, mhw_features) 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
 import numpy.testing as nptest
@@ -40,16 +39,6 @@ def test_index_cat():
     assert index_cat(a) == 4 
     assert index_cat(b) == 3 
 
-def test_get_peak():
-    evs = np.array([np.nan,1,1,1,1,1,np.nan,np.nan,2,2,2,2,np.nan,3,3,3,
-                   np.nan, 4,4,4,4,4, np.nan])
-    a = xr.DataArray(np.arange(23), dims=['evs'], coords=[evs])
-    b = a + 0.5
-    peak = xr.DataArray([3,8,np.nan,18], dims=['ev'], coords=[np.array([1,2,3,4])])
-    ds =xr.Dataset({'a': a, 'b':b, 'peak': peak})
-    peaks = get_peak(ds, ['a','b'], dim='ev')
-    nptest.assert_equal(peaks['a'].values, np.array([3,8,np.nan,18])) 
-    nptest.assert_equal(peaks['b'].values, np.array([3.5,8.5,np.nan,18.5])) 
 
 def test_cat_duration():
     a = np.array([1,2,1,1,3,2,1])
@@ -58,50 +47,43 @@ def test_cat_duration():
     assert cat_duration(a,arg=3) == 1  
     assert cat_duration(a,arg=4) == 0  
 
+
 def test_mhw_features():
     # testing to check that with all-nan array calculation skipped and np.nan assigned
     ds = xr.Dataset()
-    ds['start'] = xr.DataArray([np.nan, np.nan, np.nan], dims=['time'], coords=[np.arange(3)])
-    ds = mhw_features(ds, 'time')
+    for var in ['start','end','anom_plus', 'anom_minus', 'seas', 'ts',
+            'thresh', 'events', 'relThresh', 'relSeas', 'relThreshNorm', 'mabs']:
+        ds[var] = xr.DataArray([np.nan, np.nan, np.nan], dims=['time'], coords=[np.arange(3)])
+    ds = mhw_features(ds, 'time', 321)
     assert np.isnan( ds.start_idx.values )
 
-def test_categories(dsnorm):
-    ds = categories(dsnorm.loc[{'cell': 0}], xr.Dataset())
-    nptest.assert_array_equal(ds['category'], np.array(['Moderate', '0.0',
-           'Strong', '0.0', 'Moderate', 'Moderate', 'Strong', '0.0', '0.0'])) 
-    nptest.assert_array_equal( ds['duration_moderate'], np.array([5., np.nan,
-                               2., np.nan,  5.,  5., 16., np.nan, np.nan]))
-    nptest.assert_array_equal( ds['duration_strong'], np.array([0., np.nan,
-                               3., np.nan,  0.,  0., 1., np.nan, np.nan]))
-    nptest.assert_array_equal( ds['duration_severe'], np.array([0., np.nan,
-                               0., np.nan,  0.,  0., 0., np.nan, np.nan]))
-    nptest.assert_array_equal( ds['duration_extreme'], np.array([0., np.nan,
-                               0., np.nan,  0.,  0., 0., np.nan, np.nan]))
 
-
-def test_onset_decline():
-    # testing that with  all-nan array calculations are skipped and np.nan are assigned
+def test_categories():
     ds = xr.Dataset()
-    ds['start_idx'] = xr.DataArray([np.nan, np.nan, np.nan], dims=['event'], coords=[np.arange(3)])
-    ds = onset_decline(ds, ds)
-    xrtest.assert_equal(ds.start_idx, ds.rate_decline)
-    xrtest.assert_equal(ds.start_idx, ds.rate_onset)
+    ds['relThreshNorm'] = xr.DataArray([1.2, 0.9, 2.3, 1.5, 0.8, 0.7, 1.6, 2.1])
+    ds = categories(ds)
+    nptest.assert_array_equal(ds['category'], np.array(['Severe']) )
+    #nptest.assert_array_equal(ds['category'], np.array([3.])) 
+    nptest.assert_array_equal( ds['duration_moderate'], np.array([3.]) )
+    nptest.assert_array_equal( ds['duration_strong'], np.array([3.]) )
+    nptest.assert_array_equal( ds['duration_severe'], np.array([2.]) )
+    nptest.assert_array_equal( ds['duration_extreme'], np.array([0.]) )
+
+
+def test_onset_decline(rates):
+    # testing that with  all-nan array calculations are skipped and np.nan are assigned
+    ds, onset, decline = rates
+    ds = onset_decline(ds, 321)
+    nptest.assert_almost_equal(ds.rate_decline.values, decline)
+    nptest.assert_almost_equal(ds.rate_onset.values, onset)
+
 
 def test_get_edge():
-    relSeas = xr.DataArray(np.arange(1,20))
-    anom = xr.DataArray(np.arange(21,40))
-    # use idx for onset and idx+1 for decline so you test respectively start
-    # edge for onset and end edge for decline but avoid start for decline and
-    # end for onset since they aren't valid values
-    idx = xr.DataArray([0, 5, 17])
-    onset = xr.DataArray([1. , 15.5, 27.5])
-    decline = xr.DataArray([12.5 , 17.5, 19.0])
-    #for onset edge = 0 step = +1, relSeas=relSeas[0]
-    xrtest.assert_equal( get_edge(relSeas, anom, idx, 0, 1),
-                               onset)
-    #for decline edge = len(ts)-1 and step = -1, relSeas=relSeas[-1]
-    xrtest.assert_equal( get_edge(relSeas, anom, idx+1, 18, -1),
-                               decline)
+    # test for idx != edge 
+    assert get_edge(2.3, 1.7, 2, 0) == 2.0
+    # test for idx == edge
+    assert get_edge(2.3, 1.7, 0, 0) == 2.3
+
 
 def test_get_period():
 #    def get_period(start, end, peak, tsend):

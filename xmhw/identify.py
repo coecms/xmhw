@@ -210,6 +210,9 @@ def land_check(temp, tdim='time'):
     if len(dims) == 0:
         temp = temp.expand_dims({'point': [0.]})
         dims = ['point']
+    for d in dims:
+        if len(temp[d]) == 0:
+            raise XmhwException(f'Dimension {d} has 0 lenght, exiting')
     ts = temp.stack(cell=(dims))
     # drop cells that have all nan values along time
     ts = ts.dropna(dim='cell',how='all')

@@ -23,7 +23,11 @@ from .exception import XmhwException
 
 
 def mhw_ds(ds, ts, thresh, seas, tdim='time'):
-    """ Calculate and add to dataset mhw properties
+    """Calculate and add to dataset mhw properties
+       First add the necessary timeseries to dataset
+       Then groupby 'cell' and map the call_mhw_features function
+       The call_mhw_feature function groupby 'event' and reduce dataset on same dimension,
+       while executin mhw_features where all characteristic of one mhw event are calculated
     """
     # assign event coordinate to dataset
     ds = ds.assign_coords({'event': ds.events})
@@ -39,6 +43,8 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     anom = (ts - seas.sel(doy=ts.doy))
     ds['anom_plus'] = anom.shift(**{tdim: 1})
     ds['anom_minus'] = anom.shift(**{tdim: 1})
+    # Adding ts, seas, thresh to dataset is only for debugging
+    ds['ts'] = ts
     ds['seas'] = mhw_seas
     ds['thresh'] = mhw_thresh
     relSeas = mhw_temp - mhw_seas
@@ -47,8 +53,7 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     relThresh['event'] = ds.events
     relThreshNorm = (mhw_temp - mhw_thresh) / (mhw_thresh - mhw_seas)
     relThreshNorm['event'] = ds.events
-    # in this version having these as part of the dataset helps to pass them to main mapped function 
-    ds['ts'] = ts
+    # Adding these timeseries to dataset to passthem to main mapped function 
     ds['relThresh'] = relThresh
     ds['relSeas'] = relSeas
     ds['relThreshNorm'] = relThreshNorm
@@ -56,16 +61,16 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     ds['mabs'] = mhw_temp
 
     #From here on work grouping by cell
-    ds =ds.groupby('cell').map(call_mhw_features, args=[tdim])
-    #ds =ds.groupby('cell').map(groupds_function, args=[mhw_features], farg=tdim, dim='event')
+    # Passing last index of timeseries to calculate rate of onset and decline
+    ds =ds.groupby('cell').map(call_mhw_features, args=[tdim, len(ds.mabs)-1])
     return ds
 
-def call_mhw_features(dsgroup, tdim):
-    return dsgroup.groupby('event').map(mhw_features, args=[tdim])
+
+def call_mhw_features(dsgroup, tdim, last):
+    return dsgroup.groupby('event').map(mhw_features, args=[tdim, last])
 
 
-#def mhw_features(ds, arg='time', axis=0):
-def mhw_features(ds, tdim):
+def mhw_features(ds, tdim, last):
     """Calculate all the mhw details for one event 
     """
     # Skip if event is all-nan array
@@ -75,9 +80,8 @@ def mhw_features(ds, tdim):
                     'intensity_max_abs', 'intensity_max_relThresh',
                     'intensity_cumulative_relThresh', 'intensity_var_relThresh',
                     'intensity_cumulative_abs', 'intensity_mean_abs',
-                    'intensity_var_abs', 'rate_onset', 'rate-decline']:
+                    'intensity_var_abs', 'rate_onset', 'rate_decline']:
             ds[var] = np.nan
-        #ds['category'] = ""
         ds['category'] = np.nan 
         for var in ['duration_moderate', 'duration_strong',
                     'duration_severe', 'duration_extreme']:
@@ -107,28 +111,26 @@ def mhw_features(ds, tdim):
     ds['intensity_cumulative_abs'] = ds.mabs.sum()
     # Add categories to dataset
     ds = categories(ds)
-    ds = onset_decline(ds)
+    # Calculate rates of onset and decline
+    ds = onset_decline(ds, last)
+    # Remove timeseries variables and "time" dimension
     ds = ds.drop_vars(['start','end','anom_plus', 'anom_minus', 'seas', 'ts',
            'thresh', 'events', 'relThresh', 'relSeas', 'relThreshNorm', 'mabs'])
     ds =ds.drop_dims([tdim])
-    #ds = ds.assign_coords({'event': ds.start_idx})
     return ds
-    #return ds.drop_vars(['start','end','anom_plus', 'anom_minus', 'seas', 'ts',
-    #       'thresh', 'events', 'relThresh', 'relSeas', 'relThreshNorm', 'mabs'])
 
 
 def categories(ds):
+    """ Define categories and their duration
+        Currently using number code rather than strings to help excluding np.nan
+    """
     # define categories
     categories = {1: 'Moderate', 2: 'Strong', 3: 'Severe', 4: 'Extreme'}
     # Fix categories
-    #index_peakCat = ds.relThreshNorm.argmax()
     cats = np.floor(1. + ds.relThreshNorm)
-    #cat_index = index_cat(cats)
     # temporarily removing this to make it easier to remove nans 
-    #ds['category'] = categories[index_cat(cats)] 
-    ds['category'] = index_cat(cats) 
-    #for k,v in categories.items():
-    #    ds['category'] = xr.where(cat_index == k, v, ds['category'])
+    ds['category'] = categories[index_cat(cats)] 
+    #ds['category'] = index_cat(cats) 
 
     # calculate duration of each category
     ds['duration_moderate'] = cat_duration(cats,1)
@@ -144,12 +146,6 @@ def group_function(array, func, farg=None, dim='event'):
         return array.groupby(dim).reduce(func, arg=farg)
     return array.groupby(dim).reduce(func)
 
-
-def groupds_function(ds, func, farg=None, dim='event'):
-    """ Run function on dataset after groupby on event dimension """
-    if farg:
-        return ds.groupby(dim).reduce(func, arg=farg, keep_attrs=False)
-    return ds.groupby(dim=dim).reduce(func, keep_attrs=False)
 
 def index_cat(array):
     """ Get array maximum and return minimum between peak and 4 , minus 1
@@ -171,11 +167,10 @@ def get_rate(relSeas_peak, relSeas_edge, period):
     return (relSeas_peak - relSeas_edge) / period
 
 
-#def get_edge(relSeas, anom, idx, edge, step):
 def get_edge(relSeas, anom, idx, edge):
     """ Return the relative start or end of mhw to calculate respectively onset and decline 
-        for onset edge = 0 step = 1, relSeas=relSeas[0]
-        for decline edge = len(ts)-1 and step = -1, relSeas=relSeas[-1]
+        for onset edge = 0, anom=anom.shift('time'=1), relSeas=relSeas[0]
+        for decline edge = len(ts)-1, anom=anom.shift('time'= -1), relSeas=relSeas[-1]
     """
     if idx == edge:
         x = relSeas
@@ -194,20 +189,18 @@ def get_period(start, end, peak, tsend):
     return onset_period, decline_period
 
 
-def onset_decline(ds):
+def onset_decline(ds, last):
     """ Calculate rate of onset and decline for each MHW
     """
     start = ds.start_idx.astype(int).values
-
     end = ds.end_idx.astype(int).values
     peak =ds.index_peak.astype(int).values
-    tslen = len(ds.anom_plus)
-    onset_period, decline_period = get_period(start, end, peak, tslen)
+    onset_period, decline_period = get_period(start, end, peak, last)
     relSeas_start = get_edge(ds.relSeas[0], ds.anom_plus[0], start, 0)
-    relSeas_end = get_edge(ds.relSeas[-1], ds.anom_minus[-1], end, tslen-1)
+    relSeas_end = get_edge(ds.relSeas[-1], ds.anom_minus[-1], end, last)
     relSeas_peak = ds.relSeas[peak-start]
-    onset_rate =  get_rate(relSeas_peak, relSeas_start, onset_period)
-    decline_rate =  get_rate(relSeas_peak, relSeas_end, decline_period)
+    ds['rate_onset'] =  get_rate(relSeas_peak, relSeas_start, onset_period)
+    ds['rate_decline'] =  get_rate(relSeas_peak, relSeas_end, decline_period)
     return ds 
 
 

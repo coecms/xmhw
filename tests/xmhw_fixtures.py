@@ -96,3 +96,18 @@ def mhwfilter():
     events2[18:25] = 11
     return (exceed, st, end, events, st2, end2, events2) 
 
+
+@pytest.fixture
+def rates():
+    ds = xr.Dataset()
+    ds['start_idx'] = 3.
+    ds['end_idx'] = 10.
+    ds['index_peak'] = 8.
+    anom = xr.DataArray([2.3, 1.4, 1.2, 2.3, 1.0, 2.5, 1.4, 1.8])
+    ds['relSeas'] = anom 
+    ds['anom_plus'] = anom.shift(dim_0=1)
+    ds['anom_plus'][0] = 1.5
+    ds['anom_minus'] = anom.shift(dim_0=-1)
+    ds['anom_minus'][-1] = 2.0
+    return [ds, np.array([0.0705882]), np.array([-1.20])]
+
