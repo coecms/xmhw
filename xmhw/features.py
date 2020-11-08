@@ -74,7 +74,9 @@ def mhw_features(ds, tdim, last):
     """Calculate all the mhw details for one event 
     """
     # Skip if event is all-nan array
-    if len(ds.start.dropna(dim=tdim)) == 0:
+    start = ds.start.dropna(dim=tdim).values
+    end = ds.end.dropna(dim=tdim).values
+    if len(start) == 0:
         for var in ['end_idx', 'start_idx', 'index_peak', 'intensity_max',
                     'intensity_mean', 'intensity_var', 'intensity_cumulative',
                     'intensity_max_abs', 'intensity_max_relThresh',
@@ -91,8 +93,8 @@ def mhw_features(ds, tdim, last):
         ds =ds.drop_dims(['time'])
         return ds 
     # Save start and end and duration for each event
-    ds['end_idx'] =  ds.end[-1]
-    ds['start_idx'] =  ds.start[-1]
+    ds['end_idx'] =  end[0]
+    ds['start_idx'] =  start[0]
     # Find anomaly peak for events 
     ds['index_peak'] = ds.relSeas.event[0] + ds.relSeas.argmax()
     ds['intensity_max'] = ds.relSeas.max()
