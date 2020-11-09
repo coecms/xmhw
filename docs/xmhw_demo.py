@@ -7,14 +7,19 @@ import dask
 from xmhw.xmhw import threshold, detect
 
 # using NOAA oisst as timeseries
-ds =xr.open_mfdataset(['/g/data/ua8/NOAA_OISST/AVHRR/v2-1_modified/timeseries/oisst_timeseries_2003.nc',
-                       '/g/data/ua8/NOAA_OISST/AVHRR/v2-1_modified/timeseries/oisst_timeseries_2004.nc'],
-                        concat_dim='time', combine='nested')
+ds =xr.open_mfdataset('/g/data/ua8/NOAA_OISST/AVHRR/v2-1_modified/timeseries/oisst_timeseries_*.nc',
+                        concat_dim='time', combine='nested', chunks={'time':-1, 'lat': 10, 'lon': 10})
 # removing zlev dimension, you can actually skip this since code will stack all dimensions which aren't time
 sst =ds['sst'].squeeze()
 sst = sst.drop('zlev')
-# for the moment getting a small lat/lon region to test
-tos = sst.sel(lat=slice(-42,-41.5),lon=slice(-179,0.5))
+# for the moment getting small region to test
+# This correspond to ... ocean cell grid points
+tos = sst.sel(lat=slice(-44,-41),lon=slice(144, 149))
+# data is small enough to have 1 chunk)
+# NB for each cell the timeseries should be in same chunk, fo this reason chunk({'time-dimension': -1})
+# is included n the module where necessary
+ts = tos.chunk({'time':-1, 'lat':-1, 'lon':-1})
+ts
 
 clim = threshold(tos)
 # Save results to netcdf file
