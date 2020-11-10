@@ -62,20 +62,34 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
 
     #From here on work grouping by cell
     # Passing last index of timeseries to calculate rate of onset and decline
-    ds =ds.groupby('cell').map(call_mhw_features, args=[tdim, len(ds.mabs)-1])
+    #ds =ds.groupby('cell').map(call_mhw_features, args=[tdim, len(ds.mabs)-1])
+    # unify chunks inc ase variables have different chunks along cell
+    ds = ds.unify_chunks()
+    orig_chunks = ds.chunks
+    print(orig_chunks)
+    dstemp = ds.groupby('cell').map(call_template)
+    dstemp = dstemp.chunk({'event': -1, 'cell': 1})
+    print(dstemp)
+    ds = ds.map_blocks(call_groupby, args=[tdim, len(ds.mabs)-1], template=dstemp)
     return ds
 
 
+def call_groupby(ds, tdim, last):
+    return ds.groupby('cell').map(call_mhw_features, args=[tdim, last])
+
+
 def call_mhw_features(dsgroup, tdim, last):
+    print('got to call_mhw_features')
     return dsgroup.groupby('event').map(mhw_features, args=[tdim, last])
 
 
 def mhw_features(ds, tdim, last):
     """Calculate all the mhw details for one event 
     """
+
+    print('got to mhw_features')
     # Skip if event is all-nan array
     start = ds.start.dropna(dim=tdim).values
-    end = ds.end.dropna(dim=tdim).values
     if len(start) == 0:
         for var in ['end_idx', 'start_idx', 'index_peak', 'intensity_max',
                     'intensity_mean', 'intensity_var', 'intensity_cumulative',
@@ -93,6 +107,7 @@ def mhw_features(ds, tdim, last):
         ds =ds.drop_dims(['time'])
         return ds 
     # Save start and end and duration for each event
+    end = ds.end.dropna(dim=tdim).values
     ds['end_idx'] =  end[0]
     ds['start_idx'] =  start[0]
     # Find anomaly peak for events 
@@ -213,3 +228,27 @@ def flip_cold(ds):
         if 'intensity' in varname and '_var' not in varname:
             ds[varname] = -1*ds[varname]
     return ds
+
+
+def ds_template(ds):
+    """Create dataset template for map_blocks
+    """
+    mhw = ds.copy()
+    for var in ['end_idx', 'start_idx', 'index_peak', 'intensity_max',
+                'intensity_mean', 'intensity_var', 'intensity_cumulative',
+                'intensity_max_abs', 'intensity_max_relThresh',
+                'intensity_cumulative_relThresh', 'intensity_var_relThresh',
+                'intensity_cumulative_abs', 'intensity_mean_abs',
+                'intensity_var_abs', 'rate_onset', 'rate_decline']:
+        mhw[var] = np.nan
+        mhw['category'] = np.nan
+    for var in ['duration_moderate', 'duration_strong',
+                'duration_severe', 'duration_extreme']:
+        mhw[var] = 0
+    mhw = mhw.drop_vars(['start','end','anom_plus', 'anom_minus', 'seas', 'ts',
+           'thresh', 'events', 'relThresh', 'relSeas', 'relThreshNorm', 'mabs'])
+    return mhw.drop_dims(['time'])
+
+
+def call_template(dsgroup):
+    return dsgroup.groupby('event').map(ds_template)

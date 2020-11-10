@@ -182,7 +182,7 @@ def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2, tdim='time'):
     sel_events.name = 'events'
 
     # if joinAcross Gaps call join_gaps function, this will update start, end and mappings of events
-    ds = xr.Dataset({'start': start, 'end': end, 'events': sel_events}).chunk({tdim:-1,'cell':1})
+    ds = xr.Dataset({'start': start, 'end': end, 'events': sel_events}).chunk({tdim:-1})#,'cell':1})
     if joinGaps:
         ds = ds.groupby('cell').map(join_gaps, args=[maxGap], tdim=tdim)
     # transpose dataset so order of coordinates is the same as other arrays
