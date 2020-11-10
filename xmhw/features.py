@@ -65,29 +65,28 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     #ds =ds.groupby('cell').map(call_mhw_features, args=[tdim, len(ds.mabs)-1])
     # unify chunks inc ase variables have different chunks along cell
     ds = ds.unify_chunks()
-    orig_chunks = ds.chunks
-    print(orig_chunks)
     dstemp = ds.groupby('cell').map(call_template)
     dstemp = dstemp.chunk({'event': -1, 'cell': 1})
-    print(dstemp)
-    ds = ds.map_blocks(call_groupby, args=[tdim, len(ds.mabs)-1], template=dstemp)
+    ds = ds.map_blocks(call_groupby, args=[tdim, len(ds.mabs)-1, dstemp.event.values], template=dstemp)
     return ds
 
 
-def call_groupby(ds, tdim, last):
-    return ds.groupby('cell').map(call_mhw_features, args=[tdim, last])
+def call_groupby(ds, tdim, last, allevs):
+    return ds.groupby('cell').map(call_mhw_features, args=[tdim, last, allevs])
 
 
-def call_mhw_features(dsgroup, tdim, last):
-    print('got to call_mhw_features')
-    return dsgroup.groupby('event').map(mhw_features, args=[tdim, last])
+def call_mhw_features(dsgroup, tdim, last, allevs):
+    ds = dsgroup.groupby('event').map(mhw_features, args=[tdim, last])
+    all_evs = xr.DataArray(allevs, dims=['event'], coords=[allevs])
+    ds  = ds.reindex_like(all_evs)
+    #return dsgroup.groupby('event').map(mhw_features, args=[tdim, last, allevs])
+    return ds
 
 
 def mhw_features(ds, tdim, last):
     """Calculate all the mhw details for one event 
     """
 
-    print('got to mhw_features')
     # Skip if event is all-nan array
     start = ds.start.dropna(dim=tdim).values
     if len(start) == 0:
@@ -141,13 +140,14 @@ def categories(ds):
     """ Define categories and their duration
         Currently using number code rather than strings to help excluding np.nan
     """
+    # trying to use strings create issues when merging dataset with nans
     # define categories
-    categories = {1: 'Moderate', 2: 'Strong', 3: 'Severe', 4: 'Extreme'}
+    # categories = {1: 'Moderate', 2: 'Strong', 3: 'Severe', 4: 'Extreme'}
     # Fix categories
     cats = np.floor(1. + ds.relThreshNorm)
     # temporarily removing this to make it easier to remove nans 
-    ds['category'] = categories[index_cat(cats)] 
-    #ds['category'] = index_cat(cats) 
+    #ds['category'] = categories[index_cat(cats)] 
+    ds['category'] = index_cat(cats) 
 
     # calculate duration of each category
     ds['duration_moderate'] = cat_duration(cats,1)
