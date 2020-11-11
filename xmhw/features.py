@@ -67,8 +67,6 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     ds = ds.unify_chunks()
     dstemp = ds.groupby('cell').map(call_template)
     dstemp = dstemp.chunk({'event': -1, 'cell': 1})
-    ds = ds.set_index(time='event')
-    print(ds)
     ds = ds.map_blocks(call_groupby, args=[tdim, len(ds.mabs)-1, dstemp.event.values], template=dstemp)
     return ds
 
