@@ -19,6 +19,7 @@
 import xarray as xr
 import numpy as np
 import sys
+import time
 from .exception import XmhwException
 
 
@@ -145,6 +146,7 @@ def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2, tdim='time'):
         ts - timeseries
         exceed_bool - boolean array with True values where ts >= threshold value for same dayofyear
     """
+    tstart = time.process_time()
     # exceed: [F,F,F,F,T,T,T,T,T,F,F,...]
     # Build an array with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
@@ -180,6 +182,9 @@ def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2, tdim='time'):
     # and where "events_map" is not 0
     sel_events = events.where(events.isin(start) & (events_map != 0))
     sel_events.name = 'events'
+    tend = time.process_time()
+    print('after 1st filter ', (tend-tstart)/60.)
+
 
     # if joinAcross Gaps call join_gaps function, this will update start, end and mappings of events
     ds = xr.Dataset({'start': start, 'end': end, 'events': sel_events}).chunk({tdim:-1})#,'cell':1})
@@ -187,6 +192,9 @@ def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2, tdim='time'):
         ds = ds.groupby('cell').map(join_gaps, args=[maxGap], tdim=tdim)
     # transpose dataset so order of coordinates is the same as other arrays
         ds = ds.transpose(tdim, 'cell')
+    tstart = tend
+    tend = time.process_time()
+    print('after join_gaps ', (tend-tstart)/60.)
 
     # set this aside for the moment
     # recreate start arrays with start of events on correct time and not on end time

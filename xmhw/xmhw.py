@@ -20,6 +20,7 @@ import xarray as xr
 import numpy as np
 import dask
 import sys
+import time
 from .identify import (join_gaps, mhw_filter, runavg, dask_percentile, window_roll,
                       land_check, feb29, add_doy) 
 #from .detail import mhw_ds
@@ -188,6 +189,7 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
   
    
     
+    tstart = time.process_time()
     # check maxGap < minDuration 
     if maxGap >= minDuration:
         raise XmhwException("Maximum gap between mhw events should be smaller than event minimum duration")
@@ -197,6 +199,8 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
     seas = land_check(seas, tdim='doy')
     # assign doy 
     ts = add_doy(ts)
+    tend = time.process_time()
+    print('after land_check ', (tend-tstart)/60.)
 
     # Pad missing values for all consecutive missing blocks of length <= maxPadLength
     if maxPadLength:
@@ -211,11 +215,21 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
     # Time series of "True" when threshold is exceeded, "False" otherwise
     exceed_bool = ts.groupby('doy')  > thresh
     exceed_bool = exceed_bool.chunk(chunks={tdim: -1})
+    tstart = tend
+    tend = time.process_time()
+    print('after exceed_bool ', (tend-tstart)/60.)
 
     # Find all MHW events of duration >= minDuration   
     ds = mhw_filter(exceed_bool, minDuration, joinAcrossGaps, maxGap, tdim=tdim)
+    tstart = tend
+    tend = time.process_time()
+    print('after filter ', (tend-tstart)/60.)
     # Save mhw characteristic in dataset still working on this 
     mhw = mhw_ds(ds, ts, thresh, seas, tdim=tdim)
+    #mhw = m.compute()
+    tstart = tend
+    tend = time.process_time()
+    print('after mhw_ds ', (tend-tstart)/60.)
     # Flip climatology and intensties in case of cold spell detection
     # do I need to flip climatologies here?
     if coldSpells:

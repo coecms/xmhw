@@ -19,9 +19,12 @@
 import xarray as xr
 import numpy as np
 import sys
+import time
+import dask
 from .exception import XmhwException
 
 
+#@dask.delayed(nout=1)
 def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     """Calculate and add to dataset mhw properties
        First add the necessary timeseries to dataset
@@ -29,6 +32,7 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
        The call_mhw_feature function groupby 'event' and reduce dataset on same dimension,
        while executin mhw_features where all characteristic of one mhw event are calculated
     """
+    tstart = time.process_time()
     # assign event coordinate to dataset
     ds = ds.assign_coords({'event': ds.events})
     #  Would calling this new dimension 'time' regardless of tdim create issues?
@@ -39,10 +43,16 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     mhw_temp = ts.where(ismhw)
     mhw_seas = xr.where(ismhw, seas.sel(doy=ismhw.doy.values).values, np.nan)
     mhw_thresh = xr.where(ismhw, thresh.sel(doy=ismhw.doy.values).values, np.nan)
+    tend = time.process_time()
+    print('after ismhw ', (tend-tstart)/60.)
+
     # get difference between ts and seasonal average, needed to calculate onset and decline rates later
     anom = (ts - seas.sel(doy=ts.doy))
     ds['anom_plus'] = anom.shift(**{tdim: 1})
     ds['anom_minus'] = anom.shift(**{tdim: 1})
+    tstart = tend
+    tend = time.process_time()
+    print('after anom ', (tend-tstart)/60.)
     # Adding ts, seas, thresh to dataset is only for debugging
     ds['ts'] = ts
     ds['seas'] = mhw_seas
@@ -53,6 +63,9 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     relThresh['event'] = ds.events
     relThreshNorm = (mhw_temp - mhw_thresh) / (mhw_thresh - mhw_seas)
     relThreshNorm['event'] = ds.events
+    tstart = tend
+    tend = time.process_time()
+    print('after relative ts ', (tend-tstart)/60.)
     # Adding these timeseries to dataset to passthem to main mapped function 
     ds['relThresh'] = relThresh
     ds['relSeas'] = relSeas
@@ -75,18 +88,27 @@ def call_groupby(ds, tdim, last, allevs):
     return ds.groupby('cell').map(call_mhw_features, args=[tdim, last, allevs])
 
 
-def call_mhw_features(dsgroup, tdim, last, allevs):
+def call_mhw_features_working(dsgroup, tdim, last, allevs):
     ds = dsgroup.groupby('event').map(mhw_features, args=[tdim, last])
     all_evs = xr.DataArray(allevs, dims=['event'], coords=[allevs])
     ds  = ds.reindex_like(all_evs)
-    #return dsgroup.groupby('event').map(mhw_features, args=[tdim, last, allevs])
     return ds
 
+def call_mhw_features(dsgroup, tdim, last, allevs):
+    features = [dask.delayed(mhw_features)(v, tdim, last) for k,v in dsgroup.groupby('event')]
+    results = dask.compute(features)
+    dsobj = xr.concat(results[0], dim='event')
+    all_evs = xr.DataArray(allevs, dims=['event'], coords=[allevs])
+    dsobj  = dsobj.reindex_like(all_evs)
+    return dsobj
 
+#@dask.delayed(nout=1)
 def mhw_features(ds, tdim, last):
     """Calculate all the mhw details for one event 
     """
 
+    #tstart = time.process_time()
+    ds['event'] = ds.events[0]
     # Skip if event is all-nan array
     start = ds.start.dropna(dim=tdim).values
     if len(start) == 0:
@@ -110,12 +132,11 @@ def mhw_features(ds, tdim, last):
     ds['end_idx'] =  end[0]
     ds['start_idx'] =  start[0]
     # Find anomaly peak for events 
-    ds['index_peak'] = ds.relSeas.event[0] + ds.relSeas.argmax()
+    ds['index_peak'] = ds.event + ds.relSeas.argmax()
     ds['intensity_max'] = ds.relSeas.max()
     ds['intensity_mean'] = ds.relSeas.mean() 
     ds['intensity_var'] = np.sqrt(ds.relSeas.var()) 
     ds['intensity_cumulative'] = ds.relSeas.sum()
-    # stats for 
     rel_peak = (ds.index_peak - ds.start_idx).astype(int).values
     ds['intensity_max_relThresh'] = ds.relThresh[rel_peak]
     ds['intensity_max_abs'] = ds.mabs[rel_peak]
