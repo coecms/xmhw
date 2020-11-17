@@ -18,6 +18,7 @@
 
 import xarray as xr
 import numpy as np
+import pandas as pd
 import sys
 import time
 import dask
@@ -32,7 +33,6 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
        The call_mhw_feature function groupby 'event' and reduce dataset on same dimension,
        while executin mhw_features where all characteristic of one mhw event are calculated
     """
-    tstart = time.process_time()
     # assign event coordinate to dataset
     ds = ds.assign_coords({'event': ds.events})
     #  Would calling this new dimension 'time' regardless of tdim create issues?
@@ -43,16 +43,11 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     mhw_temp = ts.where(ismhw)
     mhw_seas = xr.where(ismhw, seas.sel(doy=ismhw.doy.values).values, np.nan)
     mhw_thresh = xr.where(ismhw, thresh.sel(doy=ismhw.doy.values).values, np.nan)
-    tend = time.process_time()
-    print('after ismhw ', (tend-tstart)/60.)
 
     # get difference between ts and seasonal average, needed to calculate onset and decline rates later
     anom = (ts - seas.sel(doy=ts.doy))
     ds['anom_plus'] = anom.shift(**{tdim: 1})
     ds['anom_minus'] = anom.shift(**{tdim: 1})
-    tstart = tend
-    tend = time.process_time()
-    print('after anom ', (tend-tstart)/60.)
     # Adding ts, seas, thresh to dataset is only for debugging
     ds['ts'] = ts
     ds['seas'] = mhw_seas
@@ -63,13 +58,16 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
     relThresh['event'] = ds.events
     relThreshNorm = (mhw_temp - mhw_thresh) / (mhw_thresh - mhw_seas)
     relThreshNorm['event'] = ds.events
-    tstart = tend
-    tend = time.process_time()
-    print('after relative ts ', (tend-tstart)/60.)
     # Adding these timeseries to dataset to passthem to main mapped function 
     ds['relThresh'] = relThresh
     ds['relSeas'] = relSeas
     ds['relThreshNorm'] = relThreshNorm
+    # adding this so i can use it in groupby !!
+    ds['cats'] = np.floor(1. + ds.relThreshNorm)
+    ds['duration_moderate'] = ds.cats.where(ds.cats == 1)
+    ds['duration_strong'] = ds.cats.where(ds.cats == 2)
+    ds['duration_severe'] = ds.cats.where(ds.cats == 3)
+    ds['duration_extreme'] = ds.cats.where(ds.cats == 4)
     # if I remove this then I need to find a way to pass this series to onset/decline
     ds['mabs'] = mhw_temp
 
@@ -85,14 +83,96 @@ def mhw_ds(ds, ts, thresh, seas, tdim='time'):
 
 
 def call_groupby(ds, tdim, last, allevs):
-    return ds.groupby('cell').map(call_mhw_features, args=[tdim, last, allevs])
+    return ds.groupby('cell').map(call_mhw_features_working, args=[tdim, last, allevs])
 
 
-def call_mhw_features_working(dsgroup, tdim, last, allevs):
-    ds = dsgroup.groupby('event').map(mhw_features, args=[tdim, last])
+def call_mhw_features_working(dscell, tdim, last, allevs):
+    # convert xarray dataet for 1 cell to dataframe
+    dftime = dscell.to_dataframe()
+    # call groupby event and calculate some of the mhw properties
+    df = agg_df(dftime)
+    #df = agg_df2(dftime)
+    # calculate the rest of the mhw properties
+    df = moreop(df, dftime.relThresh, dftime.mabs)
+    # calculate onset_decline
+    df = onset_decline(df, last)    
+    # convert back to xarray dataset and reindex so all cells have same event axis
+    ds = xr.Dataset.from_dataframe(df, sparse=False)
     all_evs = xr.DataArray(allevs, dims=['event'], coords=[allevs])
     ds  = ds.reindex_like(all_evs)
     return ds
+
+def add_df2(df):
+    agg_dict = {
+            event : ('event', 'first'),
+            index_start : ('start', 'nunique'),
+            index_end : ('end', 'nunique'),
+            relS_imax : ('relSeas', np.argmax),
+            # the following are needed for onset_decline
+            relS_first : ('relSeas', 'first'),
+            relS_last : ('relSeas', 'last'),
+            anom_first : ('anom_plus', 'first'),
+            anom_last : ('anom_minus', 'last'),
+            # till here
+            intensity_max : ('relSeas', 'max'),
+            intensity_mean : ('relSeas', 'mean'),
+            intensity_cumulative : ('relSeas', 'sum'),
+            relS_var : ('relSeas', 'var'),
+            relT_var : ('relThresh', 'var'), 
+            intensity_cumulative_relThresh : ('relThresh', 'sum'),
+            intensity_mean_abs : ('mabs', 'mean'),
+            mabs_var : ('mabs', 'var'), 
+            intensity_cumulative_abs : ('mabs', 'sum'),
+            max_cat : ('cats', 'max'), 
+            duration_moderate : ('duration_moderate', 'sum'),
+            duration_strong : ('duration_strong', 'sum'),
+            duration_severe : ('duration_severe', 'sum'),
+            duration_extreme : ('duration_extreme', 'sum')} 
+    features = [dask.delayed(pd.agg)(v, agg_dict) for k,v in dsgroup.groupby('event')]
+    results = dask.compute(features)
+    print(results)
+    return pd.DataFrame(results) 
+
+def agg_df(df):
+    """Define and aggregation dictionary to avoid apply
+    """
+    return df.groupby('event').agg(
+            event = ('event', 'first'),
+            index_start = ('start', 'nunique'),
+            index_end = ('end', 'nunique'),
+            relS_imax = ('relSeas', np.argmax),
+            # the following are needed for onset_decline
+            relS_first = ('relSeas', 'first'),
+            relS_last = ('relSeas', 'last'),
+            anom_first = ('anom_plus', 'first'),
+            anom_last = ('anom_minus', 'last'),
+            # till here
+            intensity_max = ('relSeas', 'max'),
+            intensity_mean = ('relSeas', 'mean'),
+            intensity_cumulative = ('relSeas', 'sum'),
+            relS_var = ('relSeas', 'var'),
+            relT_var = ('relThresh', 'var'), 
+            intensity_cumulative_relThresh = ('relThresh', 'sum'),
+            intensity_mean_abs = ('mabs', 'mean'),
+            mabs_var = ('mabs', 'var'), 
+            intensity_cumulative_abs = ('mabs', 'sum'),
+            max_cat = ('cats', 'max'), 
+            duration_moderate = ('duration_moderate', 'sum'),
+            duration_strong = ('duration_strong', 'sum'),
+            duration_severe = ('duration_severe', 'sum'),
+            duration_extreme = ('duration_extreme', 'sum') )
+            # intensity_max can be sued as relSeas(index_peak) in onset_decline
+
+def moreop(df, relT, mabs):
+    df['index_peak'] = df.event + df.relS_imax
+    df['intensity_var'] = np.sqrt(df.relS_var) 
+    df['intensity_max_relThresh'] = relT.iloc[df.index_peak.values]
+    df['intensity_max_abs'] = mabs.iloc[df.index_peak.values]
+    df['intensity_var_relThresh'] = np.sqrt(df.relT_var) 
+    df['intensity_var_abs'] = np.sqrt(df.mabs_var) 
+    df['category'] = np.minimum(df.max_cat, 4)
+    return df.drop(['relS_imax', 'relS_var', 'relT_var', 'max_cat', 'mabs_var'], axis=1)
+
 
 def call_mhw_features(dsgroup, tdim, last, allevs):
     features = [dask.delayed(mhw_features)(v, tdim, last) for k,v in dsgroup.groupby('event')]
@@ -102,80 +182,7 @@ def call_mhw_features(dsgroup, tdim, last, allevs):
     dsobj  = dsobj.reindex_like(all_evs)
     return dsobj
 
-#@dask.delayed(nout=1)
-def mhw_features(ds, tdim, last):
-    """Calculate all the mhw details for one event 
-    """
 
-    #tstart = time.process_time()
-    ds['event'] = ds.events[0]
-    # Skip if event is all-nan array
-    start = ds.start.dropna(dim=tdim).values
-    if len(start) == 0:
-        for var in ['end_idx', 'start_idx', 'index_peak', 'intensity_max',
-                    'intensity_mean', 'intensity_var', 'intensity_cumulative',
-                    'intensity_max_abs', 'intensity_max_relThresh',
-                    'intensity_cumulative_relThresh', 'intensity_var_relThresh',
-                    'intensity_cumulative_abs', 'intensity_mean_abs',
-                    'intensity_var_abs', 'rate_onset', 'rate_decline']:
-            ds[var] = np.nan
-        ds['category'] = np.nan 
-        for var in ['duration_moderate', 'duration_strong',
-                    'duration_severe', 'duration_extreme']:
-            ds[var] = 0
-        ds = ds.drop_vars(['start','end','anom_plus', 'anom_minus', 'seas', 'ts',
-           'thresh', 'events', 'relThresh', 'relSeas', 'relThreshNorm', 'mabs'])
-        ds =ds.drop_dims(['time'])
-        return ds 
-    # Save start and end and duration for each event
-    end = ds.end.dropna(dim=tdim).values
-    ds['end_idx'] =  end[0]
-    ds['start_idx'] =  start[0]
-    # Find anomaly peak for events 
-    ds['index_peak'] = ds.event + ds.relSeas.argmax()
-    ds['intensity_max'] = ds.relSeas.max()
-    ds['intensity_mean'] = ds.relSeas.mean() 
-    ds['intensity_var'] = np.sqrt(ds.relSeas.var()) 
-    ds['intensity_cumulative'] = ds.relSeas.sum()
-    rel_peak = (ds.index_peak - ds.start_idx).astype(int).values
-    ds['intensity_max_relThresh'] = ds.relThresh[rel_peak]
-    ds['intensity_max_abs'] = ds.mabs[rel_peak]
-    ds['intensity_var_relThresh'] = np.sqrt(ds.relThresh.var()) 
-    ds['intensity_cumulative_relThresh'] = ds.relThresh.sum()
-    # abs stats
-    ds['intensity_mean_abs'] = ds.mabs.mean()
-    ds['intensity_var_abs'] = np.sqrt(ds.mabs.var()) 
-    ds['intensity_cumulative_abs'] = ds.mabs.sum()
-    # Add categories to dataset
-    ds = categories(ds)
-    # Calculate rates of onset and decline
-    ds = onset_decline(ds, last)
-    # Remove timeseries variables and "time" dimension
-    ds = ds.drop_vars(['start','end','anom_plus', 'anom_minus', 'seas', 'ts',
-           'thresh', 'events', 'relThresh', 'relSeas', 'relThreshNorm', 'mabs'])
-    ds =ds.drop_dims([tdim])
-    return ds
-
-
-def categories(ds):
-    """ Define categories and their duration
-        Currently using number code rather than strings to help excluding np.nan
-    """
-    # trying to use strings create issues when merging dataset with nans
-    # define categories
-    # categories = {1: 'Moderate', 2: 'Strong', 3: 'Severe', 4: 'Extreme'}
-    # Fix categories
-    cats = np.floor(1. + ds.relThreshNorm)
-    # temporarily removing this to make it easier to remove nans 
-    #ds['category'] = categories[index_cat(cats)] 
-    ds['category'] = index_cat(cats) 
-
-    # calculate duration of each category
-    ds['duration_moderate'] = cat_duration(cats,1)
-    ds['duration_strong'] = cat_duration(cats, 2)
-    ds['duration_severe'] = cat_duration(cats, 3)
-    ds['duration_extreme'] = cat_duration(cats, 4)
-    return ds 
 
 
 def group_function(array, func, farg=None, dim='event'):
@@ -205,41 +212,65 @@ def get_rate(relSeas_peak, relSeas_edge, period):
     return (relSeas_peak - relSeas_edge) / period
 
 
-def get_edge(relSeas, anom, idx, edge):
+def get_edge(relS, anom, idx, edge):
     """ Return the relative start or end of mhw to calculate respectively onset and decline 
         for onset edge = 0, anom=anom.shift('time'=1), relSeas=relSeas[0]
         for decline edge = len(ts)-1, anom=anom.shift('time'= -1), relSeas=relSeas[-1]
     """
-    if idx == edge:
-        x = relSeas
-    else:
-        x = anom
-    return 0.5*(relSeas + x)
+    x = relS.where(idx == edge, anom)
+    return 0.5*(relS + x)
 
 
 def get_period(start, end, peak, tsend):
-    """ Return the onset/decline period for a mhw 
+    """ Return the onset/decline period for a mhw
     """
-    x = xr.where(peak == 0, 1, peak)
-    onset_period = xr.where(start == 0, x, x + 0.5)
-    y = xr.where(peak == tsend, 1, end - start - peak)
-    decline_period = xr.where(end == tsend, y, y + 0.5)
+    esp = end - start - peak
+    x = peak.where(peak == 0, 1)
+    #x = np.where(peak == 0, 1, peak)
+    onset_period = x.where(start != 0, x + 0.5)
+    #onset_period = np.where(start == 0, x,  x + 0.5)
+    y = esp.where(peak != tsend, 1)
+    #y = np.where(peak == tsend, 1, esp)
+    decline_period = y.where(end != tsend, y + 0.5)
+    #decline_period = np.where(end == tsend, y, y + 0.5)
     return onset_period, decline_period
 
+def onset_p(start, peak):
+    """ Return the onset period for a mhw 
+    """
+    if peak == 0:
+        return 1
+    if start == 0:
+        return peak
+    else:
+        return peak + 0.5
 
-def onset_decline(ds, last):
+
+def decline_p(end, peak, y, tsend):
+    """ Return the decline period for a mhw 
+    """
+    if peak == tsend:
+        return 1
+    if end == tsend:
+        return y 
+    else:
+        return y + 0.5
+
+
+def onset_decline(df, last):
     """ Calculate rate of onset and decline for each MHW
     """
-    start = ds.start_idx.astype(int).values
-    end = ds.end_idx.astype(int).values
-    peak =ds.index_peak.astype(int).values
-    onset_period, decline_period = get_period(start, end, peak, last)
-    relSeas_start = get_edge(ds.relSeas[0], ds.anom_plus[0], start, 0)
-    relSeas_end = get_edge(ds.relSeas[-1], ds.anom_minus[-1], end, last)
-    relSeas_peak = ds.relSeas[peak-start]
-    ds['rate_onset'] =  get_rate(relSeas_peak, relSeas_start, onset_period)
-    ds['rate_decline'] =  get_rate(relSeas_peak, relSeas_end, decline_period)
-    return ds 
+    #dec_idx = ds.index_end - ds.index_start - ds.index_peak
+    #onset_period = onset_p(ds.index_start, ds.index_peak)
+    #decline_period = decline_p(ds.index_end, ds.index_peak, dec_idx, last)
+    onset_period, decline_period = get_period(df.index_start, df.index_end, df.index_peak, last)
+    relSeas_start = get_edge(df.relS_first, df.anom_first, df.index_start, 0)
+    relSeas_end = get_edge(df.relS_last, df.anom_last, df.index_end, last)
+    # this is really intensity_max!!!
+    #relSeas_peak = ds.relSeas[peak-start]
+    df['rate_onset'] =  get_rate(df.intensity_max, relSeas_start, onset_period)
+    df['rate_decline'] =  get_rate(df.intensity_max, relSeas_end, decline_period)
+    return df.drop(['anom_first', 'anom_last', 'relS_last', 'relS_first'], axis=1) 
 
 
 def flip_cold(ds):
@@ -255,7 +286,7 @@ def ds_template(ds):
     """Create dataset template for map_blocks
     """
     mhw = ds.copy()
-    for var in ['end_idx', 'start_idx', 'index_peak', 'intensity_max',
+    for var in ['index_end', 'index_start', 'index_peak', 'intensity_max',
                 'intensity_mean', 'intensity_var', 'intensity_cumulative',
                 'intensity_max_abs', 'intensity_max_relThresh',
                 'intensity_cumulative_relThresh', 'intensity_var_relThresh',
