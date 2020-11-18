@@ -210,7 +210,9 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
     #
 
     # Time series of "True" when threshold is exceeded, "False" otherwise
-    exceed_bool = ts.groupby('doy')  > thresh
+    start = time.process_time()
+    exceed_bool = ts > thresh.sel(doy=ts.doy)
+    print('after exceed', (time.process_time()-start)/60.)
     exceed_bool = exceed_bool.chunk(chunks={tdim: -1})
 
     # Find all MHW events of duration >= minDuration   

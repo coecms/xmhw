@@ -187,6 +187,7 @@ def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2, tdim='time'):
     ds = xr.Dataset({'start': start, 'end': end, 'events': sel_events}).chunk({tdim:-1})#,'cell':1})
     if joinGaps:
         ds = ds.groupby('cell').map(join_gaps, args=[maxGap], tdim=tdim)
+        #ds = ds.groupby('cell').map_blocks(join_gaps, args=[maxGap], tdim=tdim, template=ds)
     # transpose dataset so order of coordinates is the same as other arrays
         ds = ds.transpose(tdim, 'cell')
 
