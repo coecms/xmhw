@@ -213,7 +213,7 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
     #
 
     # Time series of "True" when threshold is exceeded, "False" otherwise
-    exceed_bool = ts.groupby('doy')  > thresh
+    exceed_bool = ts > thresh.sel(doy=ts.doy)
     exceed_bool = exceed_bool.chunk(chunks={tdim: -1})
     tstart = tend
     tend = time.process_time()
