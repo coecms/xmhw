@@ -25,84 +25,57 @@ import dask
 from .exception import XmhwException
 
 
-#@dask.delayed(nout=1)
-def mhw_ds(ds, ts, thresh, seas, tdim='time'):
-    """Calculate and add to dataset mhw properties
-       First add the necessary timeseries to dataset
+@dask.delayed(nout=1)
+def mhw_df(df, dfclim):
+    """Calculate and add to dataframe mhw properties for one grid cell
+       First add the necessary timeseries to dataframe
        Then groupby 'cell' and map the call_mhw_features function
        The call_mhw_feature function groupby 'event' and reduce dataset on same dimension,
        while executin mhw_features where all characteristic of one mhw event are calculated
     """
-    # assign event coordinate to dataset
-    ds = ds.assign_coords({'event': ds.events})
-    #  Would calling this new dimension 'time' regardless of tdim create issues?
-    ds['event'].assign_coords({tdim: ds[tdim]})
-
+    seas = dfclim.seas
+    thresh = dfclim.thresh
     # get temp, climatologies values for events
-    ismhw = ~np.isnan(ds.events)
-    mhw_temp = ts.where(ismhw)
-    mhw_seas = xr.where(ismhw, seas.sel(doy=ismhw.doy.values).values, np.nan)
-    mhw_thresh = xr.where(ismhw, thresh.sel(doy=ismhw.doy.values).values, np.nan)
+    ismhw = ~np.isnan(df.events)
+
+    mhw_temp = df.ts.where(ismhw)
+    mhw_seas = np.where(ismhw, seas.iloc[df.doy.values], np.nan)
+    mhw_thresh = np.where(ismhw, thresh.iloc[df.doy.values], np.nan)
 
     # get difference between ts and seasonal average, needed to calculate onset and decline rates later
-    anom = (ts - seas.sel(doy=ts.doy))
-    ds['anom_plus'] = anom.shift(**{tdim: 1})
-    ds['anom_minus'] = anom.shift(**{tdim: 1})
+    anom = (df.ts - seas.iloc[df.doy])
+    df['anom_plus'] = anom.shift(+1)
+    df['anom_minus'] = anom.shift(-1)
     # Adding ts, seas, thresh to dataset is only for debugging
-    ds['ts'] = ts
-    ds['seas'] = mhw_seas
-    ds['thresh'] = mhw_thresh
-    relSeas = mhw_temp - mhw_seas
-    relSeas['event'] = ds.events
-    relThresh = mhw_temp - mhw_thresh
-    relThresh['event'] = ds.events
-    relThreshNorm = (mhw_temp - mhw_thresh) / (mhw_thresh - mhw_seas)
-    relThreshNorm['event'] = ds.events
-    # Adding these timeseries to dataset to passthem to main mapped function 
-    ds['relThresh'] = relThresh
-    ds['relSeas'] = relSeas
-    ds['relThreshNorm'] = relThreshNorm
+    df['seas'] = mhw_seas
+    df['thresh'] = mhw_thresh
+    df['relSeas'] = mhw_temp - mhw_seas
+    df['relThresh'] = mhw_temp - mhw_thresh
+    df['relThreshNorm'] = (mhw_temp - mhw_thresh) / (mhw_thresh - mhw_seas)
     # adding this so i can use it in groupby !!
-    ds['cats'] = np.floor(1. + ds.relThreshNorm)
-    ds['duration_moderate'] = ds.cats.where(ds.cats == 1)
-    ds['duration_strong'] = ds.cats.where(ds.cats == 2)
-    ds['duration_severe'] = ds.cats.where(ds.cats == 3)
-    ds['duration_extreme'] = ds.cats.where(ds.cats == 4)
+    df['cats'] = np.floor(1. + df.relThreshNorm)
+    df['duration_moderate'] = df.cats.where(df.cats == 1)
+    df['duration_strong'] = df.cats.where(df.cats == 2)
+    df['duration_severe'] = ds.cats.where(df.cats == 3)
+    df['duration_extreme'] = ds.cats.where(df.cats == 4)
     # if I remove this then I need to find a way to pass this series to onset/decline
-    ds['mabs'] = mhw_temp
-
-    #From here on work grouping by cell
-    # Passing last index of timeseries to calculate rate of onset and decline
-    #ds =ds.groupby('cell').map(call_mhw_features, args=[tdim, len(ds.mabs)-1])
-    # unify chunks inc ase variables have different chunks along cell
-    ds = ds.unify_chunks()
-    dstemp = ds.groupby('cell').map(call_template)
-    dstemp = dstemp.chunk({'event': -1, 'cell': 1})
-    ds = ds.map_blocks(call_groupby, args=[tdim, len(ds.mabs)-1, dstemp.event.values], template=dstemp)
-    return ds
+    df['mabs'] = mhw_temp
+    return df
 
 
-def call_groupby(ds, tdim, last, allevs):
-    return ds.groupby('cell').map(call_mhw_features_working, args=[tdim, last, allevs])
 
-
-def call_mhw_features_working(dscell, tdim, last, allevs):
-    # convert xarray dataet for 1 cell to dataframe
-    dftime = dscell.to_dataframe()
-    dftime['time'] = dftime.index
+#@dask.delayed(nout=1)
+def mhw_features(dftime, tdim, last):
     # call groupby event and calculate some of the mhw properties
     df = agg_df(dftime)
     # calculate the rest of the mhw properties
     df = moreop(df, dftime.relThresh, dftime.mabs)
     # calculate onset_decline
     df = onset_decline(df, last)    
-    # convert back to xarray dataset and reindex so all cells have same event axis
-    ds = xr.Dataset.from_dataframe(df, sparse=False)
-    all_evs = xr.DataArray(allevs, dims=['event'], coords=[allevs])
-    ds  = ds.reindex_like(all_evs)
     return ds
 
 
+@dask.delayed(nout=1)
 def agg_df(df):
     """Define and aggregation dictionary to avoid apply
     """
@@ -133,8 +106,9 @@ def agg_df(df):
             duration_strong = ('duration_strong', 'sum'),
             duration_severe = ('duration_severe', 'sum'),
             duration_extreme = ('duration_extreme', 'sum') )
-            # intensity_max can be sued as relSeas(index_peak) in onset_decline
+            # intensity_max can be used as relSeas(index_peak) in onset_decline
 
+@dask.delayed(nout=1)
 def moreop(df, relT, mabs):
     df['index_peak'] = df.event + df.relS_imax
     df['intensity_var'] = np.sqrt(df.relS_var) 
@@ -227,8 +201,7 @@ def ds_template(ds):
         mhw[var] = 0
     mhw['time_start'] = mhw['time'][0]
     mhw['time_end'] = mhw['time'][-1]
-    mhw = mhw.drop_vars(['start','end','anom_plus', 'anom_minus', 'seas', 'ts',
-           'thresh', 'events', 'relThresh', 'relSeas', 'relThreshNorm', 'mabs'])
+    mhw = mhw.drop_vars(['seas', 'ts', 'thresh', 'bthresh'])
     return mhw.drop_dims(['time'])
 
 

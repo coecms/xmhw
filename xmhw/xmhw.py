@@ -21,10 +21,9 @@ import numpy as np
 import dask
 import sys
 import time
-from .identify import (join_gaps, mhw_filter, runavg, dask_percentile, window_roll,
+from .identify import (join_gaps, define_events, runavg, dask_percentile, window_roll,
                       land_check, feb29, add_doy) 
-#from .detail import mhw_ds
-from .features import mhw_ds
+from .features import call_template
 from .exception import XmhwException
 
 
@@ -211,17 +210,21 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
 
     # Time series of "True" when threshold is exceeded, "False" otherwise
     start = time.process_time()
-    exceed_bool = ts > thresh.sel(doy=ts.doy)
+    thresh_bool = ts > thresh.sel(doy=ts.doy)
     print('after exceed', (time.process_time()-start)/60.)
-    exceed_bool = exceed_bool.chunk(chunks={tdim: -1})
+    # join timeseries arrays in dataset to pass to map_blocks
+    # so data can be split by chunks
+    ds = xr.Dataset([ts, seas, thresh, thresh_bool])
+    ds = ds.chunk(chunks={tdim: -1})
+    # Build a pandas series with the positional indexes as values
+    # [0,1,2,3,4,5,6,7,8,9,10,..]
+    a = pd.Series(np.arange(len(ds[tdim])))
+# unify chunks inc ase variables have different chunks along cell
+    #ds = ds.unify_chunks()
+    # Build a template of the mhw dataset which will be returned by map_blocks
+    dstemp = ds.groupby('cell').map(call_template)
+    dstemp = dstemp.chunk({'event': -1, 'cell': 1})
+    fev = dstemp.events.values
+    mhw = ds.map_blocks(define_events, args=[a, fev, minDuration, joinAcrossGaps, maxGap, tdim], template=dstemp)
+    return mhw 
 
-    # Find all MHW events of duration >= minDuration   
-    ds = mhw_filter(exceed_bool, minDuration, joinAcrossGaps, maxGap, tdim=tdim)
-    # Save mhw characteristic in dataset still working on this 
-    mhw = mhw_ds(ds, ts, thresh, seas, tdim=tdim)
-    #mhw = m.compute()
-    # Flip climatology and intensties in case of cold spell detection
-    # do I need to flip climatologies here?
-    if coldSpells:
-        mhw = flip_cold(mhw)
-    return   mhw

@@ -21,6 +21,7 @@ import numpy as np
 import sys
 import time
 from .exception import XmhwException
+from .features import mhw_df, mhw_features
 
 
 def add_doy(ts, tdim="time"):
@@ -93,111 +94,117 @@ def dask_percentile(array, axis, q):
         drop_axis=axis)
 
 
-def join_gaps(ds, maxGap, tdim='time'):
+@dask.delayed
+def join_gaps(start, end, events, maxGap):
     """Find gaps between mhws which are less equal to maxGap and join adjacent mhw into one event
        Input:
-             ds.start - array of mhw start indexes
-             ds.end - array of mhw end indexes
+             start - series of mhw start indexes
+             end - series of mhw end indexes
+             events - series of mhw events
              maxGap - all gaps <= maxGap are removed
     """
     # calculate gaps by subtracting index of end of each mhw from start of successive mhw
     # select as True all gaps > maxGap, these are the values we'll be keeping
-    s = ds.start.dropna(dim=tdim)
-    e = ds.end.dropna(dim=tdim)
+    s = start.dropna()
+    e = end.dropna()
+    if len(s) > 1:
+        pairs = set(zip(s.values,e.values))
     
-    if len(s[tdim]) > 1 :
-        pairs = set(zip(s.squeeze().values,e.squeeze().values))
-        tplus1 = {tdim: 1}
-        tminus1 = {tdim: -1}
-        eshift = e.shift(**tplus1).load()
+        eshift = e.shift(1)#.load()
         # by setting first value to -(maxGap+1) then gaps[0] will always be True
         # in this way we avoid a comparison with Nan and retain first start
-        eshift[0] = -(maxGap + 1)
+        eshift.iloc[0] = -(maxGap + 1)
         gaps = ((s - eshift) > maxGap + 1)
         
     # shift back gaps series
-        gaps_shifted = gaps.shift(**tminus1)
+        gaps_shifted = gaps.shift(-1)
+        gaps_shifted.iloc[-1] = True
     # use "gaps" to select start indexes to keep
-        s = s.where(gaps, drop=True)
+        s = s.where(gaps).dropna()
     # use "gaps_shifted" to select end indexes and duration to keep
-        e = e.where(gaps_shifted, drop=True)
-        joined = set()
-        if len(s) < len(ds.start):
-            if len(s) > 1:
-                joined = set(zip(s.squeeze().values,e.squeeze().values)) - pairs
-            # if only one element can't use zip 
-            elif s.shape == (1,):
-                joined = set([(s.values[0],e.values[0])]) - pairs
-            # need to add this to make it work with pytest
-            elif s.shape == (1,1):
-                joined = set([(s[0].values[0], e[0].values[0])]) - pairs
+        e = e.where(gaps_shifted).dropna()
+        if len(s) < len(start.dropna()):
+            joined = set(zip(s.values,e.values)) - pairs
+            events = join_events(events, joined)
     # reindex so we have a complete time axis
-        ds['start'] = s.reindex_like(ds.start)
-        ds['end'] = e.reindex_like(ds.end)
+        start = s.reindex_like(start)
+        end = e.reindex_like(end)
     # update events which were joined
-        ds['events'] = join_events(ds.events, joined)
     else:
-        return ds
-    return ds
+        pass
+    return pd.concat([start, end, events], axis=1) 
 
 
-def mhw_filter(exceed, minDuration=5, joinGaps=True, maxGap=2, tdim='time'):
-    """ Filter events of consecutive days above threshold which are longer then minDuration
-        ts - timeseries
-        exceed_bool - boolean array with True values where ts >= threshold value for same dayofyear
+def define_events(ds, a, fevents, minDuration, joinAcrossGaps, maxGap, tdim='time'):
+    """Find all MHW events of duration >= minDuration
     """
-    # exceed: [F,F,F,F,T,T,T,T,T,F,F,...]
-    # Build an array with the positional indexes as values
-    # [0,1,2,3,4,5,6,7,8,9,10,..]
-    # this could be calculated only once for all lat/lon points 
-    a = np.arange(len(exceed[tdim]))
-    arange = xr.ones_like(exceed) * xr.DataArray(a, coords=[exceed[tdim]], dims=[tdim])
-    # Build another array where the the 1st index of a succession of Trues is propagated (is actually the index before a True?)
+    # ds.bthresh: [F,F,F,F,T,T,T,T,T,F,F,...]
+    dfclim = ds['thresh', 'seas'].to_dataframe()
+    bth = ds['bthresh'].to_series()
+    df = mhw_filter(bth, a, minDuration, joinAcrossGaps, maxGap)
+    df['ts'] = ds['ts'].to_series()
+    # not sure yet need to do this!
+    #df[time'] = df.index
+    # Prepare dataframe to get features
+    df = mhw_df(df, dfclim.thresh, dfclim.seas)
+    # Calculate mhw properties 
+    dfmhw = mhw_features(df, tdim, len(df.mabs)-1)
+
+    # Flip climatology and intensties in case of cold spell detection
+    # do I need to flip climatologies here?
+    if coldSpells:
+        dfmhw = flip_cold(dfmhw)
+    # convert back to xarray dataset and reindex so all cells have same event axis
+    mhw = xr.Dataset.from_dataframe(dfmhw, sparse=False)
+    all_evs = xr.DataArray(fevents, dims=['event'], coords=[fevents])
+    return mhw.reindex_like(all_evs)
+
+
+def mhw_filter(bthresh, a, minDuration=5, joinGaps=True, maxGap=2):
+    """ Filter events of consecutive days above threshold which are longer then minDuration
+        bthresh - boolean series with True values where ts >= threshold value for same dayofyear
+        a = series of same length with indexes maybe I can sue bthresh.index?  
+    """
+    # Build another array where the last index before the start of a succession of Trues is propagated
     # while False points retain their positional indexes
     # events = [0,1,2,3,3,3,3,3,3,9,10,...]
-    events = (arange.where(~exceed).ffill(dim=tdim)).fillna(0)
+    events = (a.where(~bthresh).ffill(dim=tdim)).fillna(0)
     # by removing the 2nd array from the 1st we get 1/2/3/4 ... counter for each mhw and 0 elsewhere
     # events_map = [0,0,0,0,1,2,3,4,5,0,0,...]
     events_map = arange - events
     # removing the series shifted by 1 place to the right from itself we're left with only the last day of the mhw having a negative counter
     # this is also indicative of the duration of the event, the series is then shifted back one place to the left and the boundaries nan are replaced with zeros 
     # shifted = [nan,0,0,0,1,1,1,1,-5,0,0,...]
-    tplus1 = {tdim: 1}
-    tminus1 = {tdim: -1}
-    shifted = (events_map - events_map.shift(**tplus1)).shift(**tminus1)
+    #tplus1 = {tdim: 1}
+    #tminus1 = {tdim: -1}
+    shifted = (events_map - events_map.shift(+1)).shift(-1)
 
-    shifted.load()
-    shifted[-1,:] = -events_map[-1,:]
+    #shifted.load()
+    shifted.iloc[-1] = -events_map.iloc[-1]
     # select only cells where shifted is less equal to the -minDuration,
     duration = events_map.where(shifted <= -minDuration)
     # from arange select where mhw duration, this will the index of last day of mhw  
     end = arange.where( ~np.isnan(duration))
     # removing duration from end index gives starting index
-    start = (end - duration + 1)
+    st = (end - duration + 1)
 
     # add 1 to events so each event is represented by its starting index
     events = events + 1
-    # Selected mhw will be represented by indexes where "events" has values included in mhw_start_idx list
+    # Selected mhw will be represented by indexes where "events" has values included in st list
     # and where "events_map" is not 0
-    sel_events = events.where(events.isin(start) & (events_map != 0))
+    sel_events = events.where(events.isin(st) & (events_map != 0))
     sel_events.name = 'events'
 
 
     # if joinAcross Gaps call join_gaps function, this will update start, end and mappings of events
-    ds = xr.Dataset({'start': start, 'end': end, 'events': sel_events}).chunk({tdim:-1})#,'cell':1})
     if joinGaps:
-        ds = ds.groupby('cell').map(join_gaps, args=[maxGap], tdim=tdim)
-        #ds = ds.groupby('cell').map_blocks(join_gaps, args=[maxGap], tdim=tdim, template=ds)
-    # transpose dataset so order of coordinates is the same as other arrays
-        ds = ds.transpose(tdim, 'cell')
-
-    # set this aside for the moment
-    # recreate start arrays with start of events on correct time and not on end time
-    #st_idx = start.dropna(dim=tdim).astype(int).values 
-    #start2 = xr.full_like(start, np.nan)
-    #start2[st_idx] = st_idx
-    #starts[0,st_idx] = st_idx
-    return  ds
+        df = join_gaps(st, end, sel_events, maxGap)
+    else:
+        df = pd.concat([st, end, sel_events], axis=1)
+    # make sure start values are now aligned with their indexes
+    df.start = a.iloc[df.st]
+    df.drop(st, axis=1, inplace=True)
+    return  df
 
 
 def land_check(temp, tdim='time'):
@@ -227,8 +234,7 @@ def land_check(temp, tdim='time'):
 
 def join_events(events, joined):
     """ Set right value for joined events """
-    if len(joined) > 0:
-        events.load()
-        for s,e in joined:
-            events[int(s):int(e)+1] = s
+    #events.load()
+    for s,e in joined:
+        events.iloc[int(s):int(e)+1] = s
     return events
