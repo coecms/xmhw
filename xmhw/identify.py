@@ -18,8 +18,10 @@
 
 import xarray as xr
 import numpy as np
+import pandas as pd
 import sys
 import time
+import dask
 from .exception import XmhwException
 from .features import mhw_df, mhw_features
 
@@ -94,18 +96,18 @@ def dask_percentile(array, axis, q):
         drop_axis=axis)
 
 
-@dask.delayed
-def join_gaps(start, end, events, maxGap):
+#@dask.delayed
+def join_gaps(st, end, events, maxGap):
     """Find gaps between mhws which are less equal to maxGap and join adjacent mhw into one event
        Input:
-             start - series of mhw start indexes
+             st - series of mhw start indexes
              end - series of mhw end indexes
              events - series of mhw events
              maxGap - all gaps <= maxGap are removed
     """
     # calculate gaps by subtracting index of end of each mhw from start of successive mhw
     # select as True all gaps > maxGap, these are the values we'll be keeping
-    s = start.dropna()
+    s = st.dropna()
     e = end.dropna()
     if len(s) > 1:
         pairs = set(zip(s.values,e.values))
@@ -123,44 +125,45 @@ def join_gaps(start, end, events, maxGap):
         s = s.where(gaps).dropna()
     # use "gaps_shifted" to select end indexes and duration to keep
         e = e.where(gaps_shifted).dropna()
-        if len(s) < len(start.dropna()):
+        if len(s) < len(st.dropna()):
             joined = set(zip(s.values,e.values)) - pairs
             events = join_events(events, joined)
     # reindex so we have a complete time axis
-        start = s.reindex_like(start)
+        st = s.reindex_like(st)
         end = e.reindex_like(end)
     # update events which were joined
     else:
         pass
-    return pd.concat([start, end, events], axis=1) 
+    return pd.concat([st.rename('start'), end.rename('end'), events], axis=1) 
 
 
-def define_events(ds, a, fevents, minDuration, joinAcrossGaps, maxGap, tdim='time'):
+#def define_events(ds, idxarr, fevents, minDuration, joinAcrossGaps, maxGap, tdim='time'):
+def define_events(ds, idxarr,  minDuration, joinAcrossGaps, maxGap):
     """Find all MHW events of duration >= minDuration
     """
-    # ds.bthresh: [F,F,F,F,T,T,T,T,T,F,F,...]
-    dfclim = ds['thresh', 'seas'].to_dataframe()
-    bth = ds['bthresh'].to_series()
-    df = mhw_filter(bth, a, minDuration, joinAcrossGaps, maxGap)
-    df['ts'] = ds['ts'].to_series()
-    # not sure yet need to do this!
-    #df[time'] = df.index
+    #dfclim = ds[['thresh', 'seas']].to_dataframe()
+    df = ds.to_dataframe()
+    #bth = ds['bthresh'].to_series()
+    # converting to dataframe so as well as tiemseries we keep doy and time!
+    # df.bthresh: [F,F,F,F,T,T,T,T,T,F,F,...]
+    dfev = mhw_filter(df.bthresh, idxarr, minDuration, joinAcrossGaps, maxGap)
     # Prepare dataframe to get features
-    df = mhw_df(df, dfclim.thresh, dfclim.seas)
+    df = mhw_df(pd.concat([df,dfev], axis=1))
+    #print('after preparing dataframe')
     # Calculate mhw properties 
-    dfmhw = mhw_features(df, tdim, len(df.mabs)-1)
+    dfmhw = mhw_features(df, len(ds.time)-1)
+    #print('after features')
+    #dfmhw.compute()
 
-    # Flip climatology and intensties in case of cold spell detection
-    # do I need to flip climatologies here?
-    if coldSpells:
-        dfmhw = flip_cold(dfmhw)
     # convert back to xarray dataset and reindex so all cells have same event axis
+    #dfmhw.compute()
     mhw = xr.Dataset.from_dataframe(dfmhw, sparse=False)
-    all_evs = xr.DataArray(fevents, dims=['event'], coords=[fevents])
-    return mhw.reindex_like(all_evs)
+    #all_evs = xr.DataArray(fevents, dims=['event'], coords=[fevents])
+    #return mhw.reindex_like(all_evs)
+    return mhw
 
 
-def mhw_filter(bthresh, a, minDuration=5, joinGaps=True, maxGap=2):
+def mhw_filter(bthresh, idxarr, minDuration=5, joinGaps=True, maxGap=2):
     """ Filter events of consecutive days above threshold which are longer then minDuration
         bthresh - boolean series with True values where ts >= threshold value for same dayofyear
         a = series of same length with indexes maybe I can sue bthresh.index?  
@@ -168,23 +171,21 @@ def mhw_filter(bthresh, a, minDuration=5, joinGaps=True, maxGap=2):
     # Build another array where the last index before the start of a succession of Trues is propagated
     # while False points retain their positional indexes
     # events = [0,1,2,3,3,3,3,3,3,9,10,...]
-    events = (a.where(~bthresh).ffill(dim=tdim)).fillna(0)
+    events = (idxarr.where(~bthresh).ffill()).fillna(0)
     # by removing the 2nd array from the 1st we get 1/2/3/4 ... counter for each mhw and 0 elsewhere
     # events_map = [0,0,0,0,1,2,3,4,5,0,0,...]
-    events_map = arange - events
+    events_map = idxarr - events
     # removing the series shifted by 1 place to the right from itself we're left with only the last day of the mhw having a negative counter
     # this is also indicative of the duration of the event, the series is then shifted back one place to the left and the boundaries nan are replaced with zeros 
     # shifted = [nan,0,0,0,1,1,1,1,-5,0,0,...]
-    #tplus1 = {tdim: 1}
-    #tminus1 = {tdim: -1}
     shifted = (events_map - events_map.shift(+1)).shift(-1)
 
     #shifted.load()
     shifted.iloc[-1] = -events_map.iloc[-1]
     # select only cells where shifted is less equal to the -minDuration,
     duration = events_map.where(shifted <= -minDuration)
-    # from arange select where mhw duration, this will the index of last day of mhw  
-    end = arange.where( ~np.isnan(duration))
+    # from idxarr select where mhw duration, this will the index of last day of mhw  
+    end = idxarr.where( ~np.isnan(duration))
     # removing duration from end index gives starting index
     st = (end - duration + 1)
 
@@ -200,10 +201,11 @@ def mhw_filter(bthresh, a, minDuration=5, joinGaps=True, maxGap=2):
     if joinGaps:
         df = join_gaps(st, end, sel_events, maxGap)
     else:
-        df = pd.concat([st, end, sel_events], axis=1)
+        df = pd.concat([st.rename('start'), end.rename('end'), sel_events], axis=1)
     # make sure start values are now aligned with their indexes
-    df.start = a.iloc[df.st]
-    df.drop(st, axis=1, inplace=True)
+    #df['start'] = idxarr.iloc[df.st]
+    #df.drop(st, axis=1, inplace=True)
+    se = sel_events.dropna()
     return  df
 
 

@@ -18,12 +18,13 @@
 
 import xarray as xr
 import numpy as np
+import pandas as pd
 import dask
 import sys
 import time
 from .identify import (join_gaps, define_events, runavg, dask_percentile, window_roll,
                       land_check, feb29, add_doy) 
-from .features import call_template
+from .features import call_template, flip_cold
 from .exception import XmhwException
 
 
@@ -110,6 +111,7 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     seas_climYear = (twindow
                        .groupby('doy')
                        .reduce(np.nanmean)).compute()
+    del twindow
     # calculate value for 29 Feb from mean fo 28-29 feb and 1 Mar
     thresh_climYear.loc[dict(doy=59)] = feb29(thresh_climYear)
     seas_climYear.loc[dict(doy=59)] = feb29(seas_climYear)
@@ -128,20 +130,19 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     thresh_climYear.name = 'threshold'
     seas_climYear.name = 'seasonal'
     # Save vector indicating which points in temp are missing values
-    missing = np.isnan(ts)
+    #missing = np.isnan(ts)
     # Set all remaining missing temp values equal to the climatology
     #seas_climYear = xr.where(missing, ts, seas_climYear)
 
     # Save in dictionary to follow what Eric does
-    clim = {}
-    #clim['thresh'] = thresh_climYear.reindex_like(ts.groupby('doy').mean()).unstack('cell')
+    clim = xr.Dataset() 
     clim['thresh'] = thresh_climYear.unstack('cell')
     clim['seas'] = seas_climYear.unstack('cell')
-    clim['missing'] = missing.unstack('cell')
+    #clim['missing'] = missing.unstack('cell')
 
     return clim
 
-def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=None, coldSpells=False, tdim='time'): 
+def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=None, coldSpells=False, tdim='time'): 
     """
 
     Applies the Hobday et al. (2016) marine heat wave definition to an input time
@@ -154,8 +155,8 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
       clim    Climatology of SST. Each key (following list) is a seasonally-varying
               time series [1D numpy array of length T] of a particular measure:
 
-        'thresh'               Seasonally varying threshold (e.g., 90th percentile)
-        'seas'                 Climatological seasonal cycle
+        'th'               Seasonally varying threshold (e.g., 90th percentile)
+        'se'                 Climatological seasonal cycle
         'missing'              A vector of TRUE/FALSE indicating which elements in 
                                temp were missing values for the MHWs detection
 
@@ -193,10 +194,13 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
         raise XmhwException("Maximum gap between mhw events should be smaller than event minimum duration")
 
     ts = land_check(temp)
-    thresh = land_check(thresh, tdim='doy')
-    seas = land_check(seas, tdim='doy')
+    th = land_check(th, tdim='doy')
+    se = land_check(se, tdim='doy')
     # assign doy 
     ts = add_doy(ts)
+    # reindex climatologies along time axis
+    thresh = th.sel(doy=ts.doy)
+    seas = se.sel(doy=ts.doy)
 
     # Pad missing values for all consecutive missing blocks of length <= maxPadLength
     if maxPadLength:
@@ -209,22 +213,31 @@ def detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, max
     #
 
     # Time series of "True" when threshold is exceeded, "False" otherwise
-    start = time.process_time()
-    thresh_bool = ts > thresh.sel(doy=ts.doy)
-    print('after exceed', (time.process_time()-start)/60.)
+    bthresh = ts > thresh
+    bthresh.name = 'bthresh'
     # join timeseries arrays in dataset to pass to map_blocks
     # so data can be split by chunks
-    ds = xr.Dataset([ts, seas, thresh, thresh_bool])
+    ds = xr.Dataset({'ts': ts, 'seas': seas, 'thresh': thresh, 'bthresh': bthresh})
     ds = ds.chunk(chunks={tdim: -1})
     # Build a pandas series with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
-    a = pd.Series(np.arange(len(ds[tdim])))
-# unify chunks inc ase variables have different chunks along cell
-    #ds = ds.unify_chunks()
+    idxarr = pd.Series(data=np.arange(len(ds[tdim])), index=ds.time.values)
     # Build a template of the mhw dataset which will be returned by map_blocks
-    dstemp = ds.groupby('cell').map(call_template)
-    dstemp = dstemp.chunk({'event': -1, 'cell': 1})
-    fev = dstemp.events.values
-    mhw = ds.map_blocks(define_events, args=[a, fev, minDuration, joinAcrossGaps, maxGap, tdim], template=dstemp)
+    #dstemp = ds.groupby('cell').map(call_template)
+    #dstemp = dstemp.chunk({'event': -1, 'cell': 1})
+    #fev = dstemp.events.values
+    #mhw = ds.map_blocks(define_events, args=[idxarr, fev, minDuration, joinAcrossGaps, maxGap, tdim], template=dstemp)
+    print('just before loop')
+    mhwls = []
+    for c in ds.cell:
+        mhwls.append( define_events(ds.sel(cell=c), idxarr,
+                      minDuration, joinAcrossGaps, maxGap))
+    #mhw = xr.merge(mhwls)
+    mhw = xr.concat(mhwls, dim='cell')
+    #mhw = ds.groupby('cell').map(define_events, args=[idxarr, minDuration, joinAcrossGaps, maxGap])
+    # Flip climatology and intensities in case of cold spell detection
+    if coldSpells:
+        mhw = flip_cold(mhw)
+
     return mhw 
 

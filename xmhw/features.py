@@ -25,28 +25,29 @@ import dask
 from .exception import XmhwException
 
 
-@dask.delayed(nout=1)
-def mhw_df(df, dfclim):
+#@dask.delayed(nout=1)
+def mhw_df(df):
     """Calculate and add to dataframe mhw properties for one grid cell
        First add the necessary timeseries to dataframe
        Then groupby 'cell' and map the call_mhw_features function
        The call_mhw_feature function groupby 'event' and reduce dataset on same dimension,
        while executin mhw_features where all characteristic of one mhw event are calculated
     """
-    seas = dfclim.seas
-    thresh = dfclim.thresh
+    #df['time'] = ts.time.to_series()
+
     # get temp, climatologies values for events
-    ismhw = ~np.isnan(df.events)
+    ismhw = df.events.notna()
 
     mhw_temp = df.ts.where(ismhw)
-    mhw_seas = np.where(ismhw, seas.iloc[df.doy.values], np.nan)
-    mhw_thresh = np.where(ismhw, thresh.iloc[df.doy.values], np.nan)
+    mhw_seas = df.seas.where(ismhw) #np.where(ismhw, df.seas, np.nan)
+    mhw_thresh = df.thresh.where(ismhw)# np.where(ismhw, df.thresh, np.nan)
 
     # get difference between ts and seasonal average, needed to calculate onset and decline rates later
-    anom = (df.ts - seas.iloc[df.doy])
+    anom = (df.ts - df.seas)
     df['anom_plus'] = anom.shift(+1)
     df['anom_minus'] = anom.shift(-1)
     # Adding ts, seas, thresh to dataset is only for debugging
+    df['time'] = df.index
     df['seas'] = mhw_seas
     df['thresh'] = mhw_thresh
     df['relSeas'] = mhw_temp - mhw_seas
@@ -56,31 +57,30 @@ def mhw_df(df, dfclim):
     df['cats'] = np.floor(1. + df.relThreshNorm)
     df['duration_moderate'] = df.cats.where(df.cats == 1)
     df['duration_strong'] = df.cats.where(df.cats == 2)
-    df['duration_severe'] = ds.cats.where(df.cats == 3)
-    df['duration_extreme'] = ds.cats.where(df.cats == 4)
+    df['duration_severe'] = df.cats.where(df.cats == 3)
+    df['duration_extreme'] = df.cats.where(df.cats == 4)
     # if I remove this then I need to find a way to pass this series to onset/decline
     df['mabs'] = mhw_temp
     return df
 
 
-
 #@dask.delayed(nout=1)
-def mhw_features(dftime, tdim, last):
+def mhw_features(dftime, last):
     # call groupby event and calculate some of the mhw properties
     df = agg_df(dftime)
     # calculate the rest of the mhw properties
-    df = moreop(df, dftime.relThresh, dftime.mabs)
+    df = properties(df, dftime.relThresh, dftime.mabs)
     # calculate onset_decline
     df = onset_decline(df, last)    
-    return ds
+    return df
 
 
-@dask.delayed(nout=1)
+#@dask.delayed(nout=1)
 def agg_df(df):
     """Define and aggregation dictionary to avoid apply
     """
-    return df.groupby('event').agg(
-            event = ('event', 'first'),
+    return df.groupby('events').agg(
+            event = ('events', 'first'),
             index_start = ('start', 'nunique'),
             index_end = ('end', 'nunique'),
             time_start = ('time', 'first'),
@@ -108,8 +108,8 @@ def agg_df(df):
             duration_extreme = ('duration_extreme', 'sum') )
             # intensity_max can be used as relSeas(index_peak) in onset_decline
 
-@dask.delayed(nout=1)
-def moreop(df, relT, mabs):
+#@dask.delayed(nout=1)
+def properties(df, relT, mabs):
     df['index_peak'] = df.event + df.relS_imax
     df['intensity_var'] = np.sqrt(df.relS_var) 
     df['intensity_max_relThresh'] = relT.iloc[df.index_peak.values]
@@ -120,30 +120,14 @@ def moreop(df, relT, mabs):
     return df.drop(['relS_imax', 'relS_var', 'relT_var', 'max_cat', 'mabs_var'], axis=1)
 
 
-def call_mhw_features(dsgroup, tdim, last, allevs):
-    features = [dask.delayed(mhw_features)(v, tdim, last) for k,v in dsgroup.groupby('event')]
-    results = dask.compute(features)
-    dsobj = xr.concat(results[0], dim='event')
-    all_evs = xr.DataArray(allevs, dims=['event'], coords=[allevs])
-    dsobj  = dsobj.reindex_like(all_evs)
-    return dsobj
-
-
-
-
-def group_function(array, func, farg=None, dim='event'):
-    """ Run function on array after groupby on event dimension """
-    if farg:
-        return array.groupby(dim).reduce(func, arg=farg)
-    return array.groupby(dim).reduce(func)
-
-
+#@dask.delayed(nout=1)
 def get_rate(relSeas_peak, relSeas_edge, period):
     """ Calculate onset/decline rate of event
     """
     return (relSeas_peak - relSeas_edge) / period
 
 
+#@dask.delayed(nout=1)
 def get_edge(relS, anom, idx, edge):
     """ Return the relative start or end of mhw to calculate respectively onset and decline 
         for onset edge = 0, anom=anom.shift('time'=1), relSeas=relSeas[0]
@@ -153,6 +137,7 @@ def get_edge(relS, anom, idx, edge):
     return 0.5*(relS + x)
 
 
+#@dask.delayed(nout=2)
 def get_period(start, end, peak, tsend):
     """ Return the onset/decline period for a mhw
     """
@@ -164,6 +149,7 @@ def get_period(start, end, peak, tsend):
     return onset_period, decline_period
 
 
+#@dask.delayed(nout=1)
 def onset_decline(df, last):
     """ Calculate rate of onset and decline for each MHW
     """
