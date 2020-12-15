@@ -20,8 +20,8 @@ import xarray as xr
 import numpy as np
 import pandas as pd
 import sys
-import time
 import dask
+from datetime import date
 from .exception import XmhwException
 from .features import mhw_df, mhw_features
 
@@ -138,6 +138,7 @@ def join_gaps(st, end, events, maxGap):
 
 
 #def define_events(ds, idxarr, fevents, minDuration, joinAcrossGaps, maxGap, tdim='time'):
+@dask.delayed(nout=1)
 def define_events(ds, idxarr,  minDuration, joinAcrossGaps, maxGap):
     """Find all MHW events of duration >= minDuration
     """
@@ -152,11 +153,8 @@ def define_events(ds, idxarr,  minDuration, joinAcrossGaps, maxGap):
     #print('after preparing dataframe')
     # Calculate mhw properties 
     dfmhw = mhw_features(df, len(ds.time)-1)
-    #print('after features')
-    #dfmhw.compute()
 
     # convert back to xarray dataset and reindex so all cells have same event axis
-    #dfmhw.compute()
     mhw = xr.Dataset.from_dataframe(dfmhw, sparse=False)
     #all_evs = xr.DataArray(fevents, dims=['event'], coords=[fevents])
     #return mhw.reindex_like(all_evs)
@@ -240,3 +238,83 @@ def join_events(events, joined):
     for s,e in joined:
         events.iloc[int(s):int(e)+1] = s
     return events
+
+def annotate_ds(ds, ds_attrs, kind):
+    """ Add attributes to output dataset, kind refer to clim or mhw
+        Units for MHW properties are based on original timeseries units
+        if units are not present in the file degree_C is assumed
+        Units for dimensions are also from the original file
+    """
+    github = 'https://github.com/coecms/xmhw'
+    try:
+        uts = ds_attrs['temp'].units
+        if any(s in uts for s in ['Celsius','celsius']):
+            uts = 'degree_C'
+    except:
+        uts = 'degree_C'
+    #set coordinates attributes
+    for c in ds.coords:
+        if c == 'doy':
+            ds[c]['units'] = '1'
+            ds[c]['long_name'] = 'Day of the year'
+        elif c == 'events':
+            ds[c]['units'] = '1'
+            ds[c]['long_name'] = 'MHW event identifier: starting index' 
+        else:
+            for k,v in ds_attrs[c].items():
+                ds[c].attrs[k] = v
+            #ds[c].assign_attrs(ds_attrs[c])
+    # set global attributes
+    if kind == 'clim':
+        # set global attributes
+        ds.attrs['source'] = f'xmhw code: {github}'
+        # potentially add reference to input data from original dataset
+        ds.attrs['title'] = f'Seasonal climatology and threshold calculated using xmhw code: {github}'
+        ds.attrs['history'] = f'{date.today()}: calculated using xmhw code {github}'
+        ds.thresh.attrs['units'] = uts 
+        ds.seas.attrs['units'] = uts 
+        #ds.threshold.lon.attrs['units'] = 'degree_north' 
+       #field.longitude.attrs['units'] = 'degree_east'
+    else:
+        ds.event.attrs['units'] = '1' 
+        ds.event.attrs['long_name'] = 'MHW event identifier: starting index' 
+        #ds.duration.attrs['long_name'] = 'MHW duration' 
+        #ds.duration.attrs['units'] = 'day' 
+        ds.intensity_max.attrs['long_name'] = 'MHW maximum (peak) intensity relative to seasonal climatology' 
+        ds.intensity_max.attrs['units'] = uts 
+        ds.intensity_mean.attrs['long_name'] = 'MHW mean intensity relative to seasonal climatology' 
+        ds.intensity_mean.attrs['units'] = uts 
+        ds.intensity_var.attrs['long_name'] = 'MHW intensity variability relative to seasonal climatology' 
+        ds.intensity_var.attrs['units'] = uts 
+        ds.intensity_cumulative.attrs['long_name'] = 'MHW cumulative intensity relative to seasonal climatology' 
+        ds.intensity_cumulative.attrs['units'] = f'{uts} day' 
+        ds.rate_onset.attrs['long_name'] = 'MHW onset rate' 
+        ds.rate_onset.attrs['units'] = f'{uts} day-1' 
+        ds.rate_decline.attrs['long_name'] = 'MHW decline rate' 
+        ds.rate_decline.attrs['units'] = f'{uts} day-1' 
+        ds.intensity_max_relThresh.attrs['long_name'] = 'MHW maximum (peak) intensity relative to threshold' 
+        ds.intensity_max_relThresh.attrs['units'] = uts 
+        ds.intensity_mean_relThresh.attrs['long_name'] = 'MHW mean intensity relative to threshold' 
+        ds.intensity_mean_relThresh.attrs['units'] = uts 
+        ds.intensity_var_relThresh.attrs['long_name'] = 'MHW intensity variability relative to threshold' 
+        ds.intensity_var_relThresh.attrs['units'] = uts 
+        ds.intensity_cumulative_relThresh.attrs['long_name'] = 'MHW cumulative intensity relative to threshold' 
+        ds.intensity_cumulative_relThresh.attrs['units'] = f'{uts} day' 
+        ds.intensity_max_abs.attrs['long_name'] = 'MHW maximum (peak) intensity absolute magnitude' 
+        ds.intensity_max_abs.attrs['units'] = uts 
+        ds.intensity_mean_abs.attrs['long_name'] = 'MHW mean intensity absolute magnitude' 
+        ds.intensity_mean_abs.attrs['units'] = uts 
+        ds.intensity_var_abs.attrs['long_name'] = 'MHW intensity variability abosulute magnitude' 
+        ds.intensity_var_abs.attrs['units'] = uts 
+        ds.intensity_cumulative_abs.attrs['long_name'] = 'MHW cumulative intensity absolute magnitude' 
+        ds.intensity_cumulative_abs.attrs['units'] = f'{uts} day' 
+        ds.category.attrs['long_name'] = 'MHW category based on peak intensity: Moderate, Strong, Severe or Extreme' 
+        ds.duration_moderate.attrs['long_name'] = 'Number of days falling in category moderate' 
+        ds.duration_moderate.attrs['units'] = '1' 
+        ds.duration_strong.attrs['long_name'] = 'Number of days falling in category strong' 
+        ds.duration_strong.attrs['units'] = '1' 
+        ds.duration_severe.attrs['long_name'] = 'Number of days falling in category severe' 
+        ds.duration_severe.attrs['units'] = '1' 
+        ds.duration_extreme.attrs['long_name'] = 'Number of days falling in category extreme' 
+        ds.duration_extreme.attrs['units'] = '1' 
+    return ds

@@ -23,7 +23,7 @@ import dask
 import sys
 import time
 from .identify import (join_gaps, define_events, runavg, dask_percentile, window_roll,
-                      land_check, feb29, add_doy) 
+                      land_check, feb29, add_doy, annotate_ds) 
 from .features import call_template, flip_cold
 from .exception import XmhwException
 
@@ -78,8 +78,12 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     if all(climatologyPeriod):
         tslice = {tdim: slice(f'{climatologyPeriod[0]}-01-01', f'{climatologyPeriod[1]}-12-31')}
         temp = temp.sel(**tslice)
-        #temp = temp.sel(time=slice(f'{climatologyPeriod[0]}-01-01',
-        #                           f'{climatologyPeriod[1]}-12-31'))
+    # save original attributes in a dictionary to be assigned to final datset
+    ds_attrs = {}
+    ds_attrs['ts'] = temp.attrs
+    #ds_attrs[tdim+'encoding'] = temp.encoding
+    for c in temp.coords:
+        ds_attrs[c] = temp[c].attrs
     # return an array stacked on all dimensions excluded time
     # Land cells are removed
     # new dimensions are (time,cell)
@@ -97,9 +101,38 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     # Apply window_roll to each cell.
     # Window_roll first finds for each day of the year all the ts values that falls in
     # a window +/-windowHalfWidth, then concatenates them in a new timeseries
-    ts = ts.chunk({tdim: -1, 'cell':1})
-    twindow = ts.groupby('cell').map(window_roll,
-                  args=[windowHalfWidth, tdim])
+    # create dataset so we can preserve all dimensions
+    #ds = xr.Dataset()
+    #ds['ts'] = ts
+    #ts = ts.chunk({tdim: -1, 'cell':1})
+    #ds = ds.chunk({tdim: -1, 'cell':1})
+    climls = []
+    for c in ts.cell:
+        climls.append( calc_thresh(ts.sel(cell=c), windowHalfWidth,
+                       pctile, smoothPercentile, smoothPercentileWidth,
+                       Ly, tdim) )
+    results =dask.compute(climls)
+    ds = xr.concat(results[0], dim=ts.cell)
+    ds = ds.unstack('cell')
+    annotate_ds(ds, ds_attrs, 'clim')
+    # add all parameters used to global attributes 
+    params = f"""Threshold calculated using:
+    {pctile} percentile;
+    climatology period is {ts[0,0][tdim].dt.year.values}-{ts[-1,0][tdim].dt.year.values}'; 
+    window half width used for percentile is {windowHalfWidth}"""
+    if smoothPercentile:
+        params = params + f";  width of moving average window to smooth percentile is {smoothPercentileWidth}"
+    ds.attrs['xmhw_parameters'] = params 
+    return ds
+
+
+
+@dask.delayed(nout=1)
+def calc_thresh(ts, windowHalfWidth, pctile, smoothPercentile,
+                smoothPercentileWidth, Ly, tdim):
+    """ Calculate threshold for one cell grid at the time
+    """
+    twindow = window_roll(ts, windowHalfWidth, tdim)
 
     # rechunk twindow otherwise it is passed to dask_percentile as a numpy array 
     twindow = twindow.chunk({'z': -1})
@@ -135,12 +168,11 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     #seas_climYear = xr.where(missing, ts, seas_climYear)
 
     # Save in dictionary to follow what Eric does
-    clim = xr.Dataset() 
-    clim['thresh'] = thresh_climYear.unstack('cell')
-    clim['seas'] = seas_climYear.unstack('cell')
-    #clim['missing'] = missing.unstack('cell')
-
-    return clim
+    ds = xr.Dataset() 
+    ds['thresh'] = thresh_climYear
+    ds['seas'] = seas_climYear
+    #clim['missing'] = missing
+    return ds
 
 def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=None, coldSpells=False, tdim='time'): 
     """
@@ -193,7 +225,18 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     if maxGap >= minDuration:
         raise XmhwException("Maximum gap between mhw events should be smaller than event minimum duration")
 
+    # save original attributes in a dictionary to be assigned to final datset
+    ds_attrs = {}
+    ds_attrs['ts'] = temp.attrs
+    #ds_attrs[tdim+'encoding'] = temp.encoding
+    for c in temp.coords:
+        ds_attrs[c] = temp[c].attrs
+
+    # return an array stacked on all dimensions excluded time
+    # Land cells are removed
+    # new dimensions are (time,cell)
     ts = land_check(temp)
+    del temp
     th = land_check(th, tdim='doy')
     se = land_check(se, tdim='doy')
     # assign doy 
@@ -201,6 +244,8 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # reindex climatologies along time axis
     thresh = th.sel(doy=ts.doy)
     seas = se.sel(doy=ts.doy)
+    del th, se
+    print('got here')
 
     # Pad missing values for all consecutive missing blocks of length <= maxPadLength
     if maxPadLength:
@@ -215,6 +260,7 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # Time series of "True" when threshold is exceeded, "False" otherwise
     bthresh = ts > thresh
     bthresh.name = 'bthresh'
+    print('got here 2')
     # join timeseries arrays in dataset to pass to map_blocks
     # so data can be split by chunks
     ds = xr.Dataset({'ts': ts, 'seas': seas, 'thresh': thresh, 'bthresh': bthresh})
@@ -227,17 +273,24 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     #dstemp = dstemp.chunk({'event': -1, 'cell': 1})
     #fev = dstemp.events.values
     #mhw = ds.map_blocks(define_events, args=[idxarr, fev, minDuration, joinAcrossGaps, maxGap, tdim], template=dstemp)
-    print('just before loop')
+    print('got to detect')
+    start = time.process_time()
     mhwls = []
+    i=0
     for c in ds.cell:
         mhwls.append( define_events(ds.sel(cell=c), idxarr,
                       minDuration, joinAcrossGaps, maxGap))
-    #mhw = xr.merge(mhwls)
-    mhw = xr.concat(mhwls, dim='cell')
+        i+=1
+        if i%20==0:
+            print(f'loop {i}: {time.process_time() - start}')
+    results = dask.compute(mhwls)
+    mhw = xr.concat(results[0], dim=ds.cell).unstack('cell')
+
     #mhw = ds.groupby('cell').map(define_events, args=[idxarr, minDuration, joinAcrossGaps, maxGap])
     # Flip climatology and intensities in case of cold spell detection
     if coldSpells:
         mhw = flip_cold(mhw)
 
+    annotate_ds(mhw, ds_attrs, 'mhw')
     return mhw 
 

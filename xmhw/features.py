@@ -25,7 +25,6 @@ import dask
 from .exception import XmhwException
 
 
-#@dask.delayed(nout=1)
 def mhw_df(df):
     """Calculate and add to dataframe mhw properties for one grid cell
        First add the necessary timeseries to dataframe
@@ -64,7 +63,6 @@ def mhw_df(df):
     return df
 
 
-#@dask.delayed(nout=1)
 def mhw_features(dftime, last):
     # call groupby event and calculate some of the mhw properties
     df = agg_df(dftime)
@@ -97,6 +95,7 @@ def agg_df(df):
             intensity_cumulative = ('relSeas', 'sum'),
             relS_var = ('relSeas', 'var'),
             relT_var = ('relThresh', 'var'), 
+            intensity_mean_relThresh = ('relThresh', 'mean'),
             intensity_cumulative_relThresh = ('relThresh', 'sum'),
             intensity_mean_abs = ('mabs', 'mean'),
             mabs_var = ('mabs', 'var'), 
@@ -176,7 +175,7 @@ def ds_template(ds):
     mhw = ds.copy()
     for var in ['index_end', 'index_start', 'index_peak', 'intensity_max',
                 'intensity_mean', 'intensity_var', 'intensity_cumulative',
-                'intensity_max_abs', 'intensity_max_relThresh',
+                'intensity_max_abs', 'intensity_max_relThresh', 'intensity_mean_relThresh',
                 'intensity_cumulative_relThresh', 'intensity_var_relThresh',
                 'intensity_cumulative_abs', 'intensity_mean_abs',
                 'intensity_var_abs', 'rate_onset', 'rate_decline']:
