@@ -150,14 +150,12 @@ def define_events(ds, idxarr,  minDuration, joinAcrossGaps, maxGap):
     dfev = mhw_filter(df.bthresh, idxarr, minDuration, joinAcrossGaps, maxGap)
     # Prepare dataframe to get features
     df = mhw_df(pd.concat([df,dfev], axis=1))
-    #print('after preparing dataframe')
     # Calculate mhw properties 
     dfmhw = mhw_features(df, len(ds.time)-1)
 
     # convert back to xarray dataset and reindex so all cells have same event axis
     mhw = xr.Dataset.from_dataframe(dfmhw, sparse=False)
-    #all_evs = xr.DataArray(fevents, dims=['event'], coords=[fevents])
-    #return mhw.reindex_like(all_evs)
+    del ds, dfmhw, df, dfev
     return mhw
 
 
@@ -203,7 +201,7 @@ def mhw_filter(bthresh, idxarr, minDuration=5, joinGaps=True, maxGap=2):
     # make sure start values are now aligned with their indexes
     #df['start'] = idxarr.iloc[df.st]
     #df.drop(st, axis=1, inplace=True)
-    se = sel_events.dropna()
+    #se = sel_events.dropna()
     return  df
 
 

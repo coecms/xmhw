@@ -114,7 +114,7 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     results =dask.compute(climls)
     ds = xr.concat(results[0], dim=ts.cell)
     ds = ds.unstack('cell')
-    annotate_ds(ds, ds_attrs, 'clim')
+    ds = annotate_ds(ds, ds_attrs, 'clim')
     # add all parameters used to global attributes 
     params = f"""Threshold calculated using:
     {pctile} percentile;
@@ -260,7 +260,6 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # Time series of "True" when threshold is exceeded, "False" otherwise
     bthresh = ts > thresh
     bthresh.name = 'bthresh'
-    print('got here 2')
     # join timeseries arrays in dataset to pass to map_blocks
     # so data can be split by chunks
     ds = xr.Dataset({'ts': ts, 'seas': seas, 'thresh': thresh, 'bthresh': bthresh})
@@ -273,7 +272,6 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     #dstemp = dstemp.chunk({'event': -1, 'cell': 1})
     #fev = dstemp.events.values
     #mhw = ds.map_blocks(define_events, args=[idxarr, fev, minDuration, joinAcrossGaps, maxGap, tdim], template=dstemp)
-    print('got to detect')
     start = time.process_time()
     mhwls = []
     i=0
@@ -281,16 +279,16 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
         mhwls.append( define_events(ds.sel(cell=c), idxarr,
                       minDuration, joinAcrossGaps, maxGap))
         i+=1
-        if i%20==0:
+        if i%100==0:
             print(f'loop {i}: {time.process_time() - start}')
     results = dask.compute(mhwls)
     mhw = xr.concat(results[0], dim=ds.cell).unstack('cell')
+    del results 
 
-    #mhw = ds.groupby('cell').map(define_events, args=[idxarr, minDuration, joinAcrossGaps, maxGap])
     # Flip climatology and intensities in case of cold spell detection
     if coldSpells:
         mhw = flip_cold(mhw)
 
-    annotate_ds(mhw, ds_attrs, 'mhw')
+    mhw  = annotate_ds(mhw, ds_attrs, 'mhw')
     return mhw 
 

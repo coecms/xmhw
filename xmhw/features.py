@@ -167,28 +167,3 @@ def flip_cold(ds):
         if 'intensity' in varname and '_var' not in varname:
             ds[varname] = -1*ds[varname]
     return ds
-
-
-def ds_template(ds):
-    """Create dataset template for map_blocks
-    """
-    mhw = ds.copy()
-    for var in ['index_end', 'index_start', 'index_peak', 'intensity_max',
-                'intensity_mean', 'intensity_var', 'intensity_cumulative',
-                'intensity_max_abs', 'intensity_max_relThresh', 'intensity_mean_relThresh',
-                'intensity_cumulative_relThresh', 'intensity_var_relThresh',
-                'intensity_cumulative_abs', 'intensity_mean_abs',
-                'intensity_var_abs', 'rate_onset', 'rate_decline']:
-        mhw[var] = np.nan
-        mhw['category'] = np.nan
-    for var in ['duration_moderate', 'duration_strong',
-                'duration_severe', 'duration_extreme']:
-        mhw[var] = 0
-    mhw['time_start'] = mhw['time'][0]
-    mhw['time_end'] = mhw['time'][-1]
-    mhw = mhw.drop_vars(['seas', 'ts', 'thresh', 'bthresh'])
-    return mhw.drop_dims(['time'])
-
-
-def call_template(dsgroup):
-    return dsgroup.groupby('event').map(ds_template)
