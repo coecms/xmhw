@@ -24,7 +24,7 @@ import sys
 import time
 from .identify import (join_gaps, define_events, runavg, dask_percentile, window_roll,
                       land_check, feb29, add_doy, annotate_ds) 
-from .features import call_template, flip_cold
+from .features import flip_cold
 from .exception import XmhwException
 
 
@@ -267,11 +267,6 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # Build a pandas series with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
     idxarr = pd.Series(data=np.arange(len(ds[tdim])), index=ds.time.values)
-    # Build a template of the mhw dataset which will be returned by map_blocks
-    #dstemp = ds.groupby('cell').map(call_template)
-    #dstemp = dstemp.chunk({'event': -1, 'cell': 1})
-    #fev = dstemp.events.values
-    #mhw = ds.map_blocks(define_events, args=[idxarr, fev, minDuration, joinAcrossGaps, maxGap, tdim], template=dstemp)
     start = time.process_time()
     mhwls = []
     i=0
@@ -282,6 +277,7 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
         if i%100==0:
             print(f'loop {i}: {time.process_time() - start}')
     results = dask.compute(mhwls)
+    print('loop completed')
     mhw = xr.concat(results[0], dim=ds.cell).unstack('cell')
     del results 
 
