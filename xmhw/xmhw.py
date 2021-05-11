@@ -144,11 +144,10 @@ def calc_thresh(ts, windowHalfWidth, pctile, smoothPercentile,
     seas_climYear = (twindow
                        .groupby('doy')
                        .reduce(np.nanmean)).compute()
-    del twindow
-    # calculate value for 29 Feb from mean fo 28-29 feb and 1 Mar
+
+    # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
     thresh_climYear.loc[dict(doy=59)] = feb29(thresh_climYear)
     seas_climYear.loc[dict(doy=59)] = feb29(seas_climYear)
-
     # Smooth if desired
     if smoothPercentile:
         # If the length of year is < 365/366 (e.g. a 360 day year from a Climate Model)
@@ -167,12 +166,13 @@ def calc_thresh(ts, windowHalfWidth, pctile, smoothPercentile,
     # Set all remaining missing temp values equal to the climatology
     #seas_climYear = xr.where(missing, ts, seas_climYear)
 
-    # Save in dictionary to follow what Eric does
+    # Save in dataset
     ds = xr.Dataset() 
     ds['thresh'] = thresh_climYear
     ds['seas'] = seas_climYear
-    #clim['missing'] = missing
+    #ds['missing'] = missing
     return ds
+
 
 def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=None, coldSpells=False, tdim='time'): 
     """
@@ -225,18 +225,17 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     if maxGap >= minDuration:
         raise XmhwException("Maximum gap between mhw events should be smaller than event minimum duration")
 
-    # save original attributes in a dictionary to be assigned to final datset
+    # save original attributes in a dictionary to be assigned to final dataset
     ds_attrs = {}
     ds_attrs['ts'] = temp.attrs
     #ds_attrs[tdim+'encoding'] = temp.encoding
     for c in temp.coords:
         ds_attrs[c] = temp[c].attrs
 
-    # return an array stacked on all dimensions excluded time
+    # return an array stacked on all dimensions excluding time
     # Land cells are removed
-    # new dimensions are (time,cell)
+    # new dimensions are (time, cell)
     ts = land_check(temp)
-    del temp
     th = land_check(th, tdim='doy')
     se = land_check(se, tdim='doy')
     # assign doy 
@@ -244,8 +243,6 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # reindex climatologies along time axis
     thresh = th.sel(doy=ts.doy)
     seas = se.sel(doy=ts.doy)
-    del th, se
-    print('got here')
 
     # Pad missing values for all consecutive missing blocks of length <= maxPadLength
     if maxPadLength:
@@ -263,21 +260,16 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # join timeseries arrays in dataset to pass to map_blocks
     # so data can be split by chunks
     ds = xr.Dataset({'ts': ts, 'seas': seas, 'thresh': thresh, 'bthresh': bthresh})
-    ds = ds.chunk(chunks={tdim: -1})
+    ds = ds.chunk(chunks={tdim: -1, 'cell': 1})
     # Build a pandas series with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
     idxarr = pd.Series(data=np.arange(len(ds[tdim])), index=ds.time.values)
     start = time.process_time()
     mhwls = []
-    i=0
     for c in ds.cell:
         mhwls.append( define_events(ds.sel(cell=c), idxarr,
                       minDuration, joinAcrossGaps, maxGap))
-        i+=1
-        if i%100==0:
-            print(f'loop {i}: {time.process_time() - start}')
     results = dask.compute(mhwls)
-    print('loop completed')
     mhw = xr.concat(results[0], dim=ds.cell).unstack('cell')
     del results 
 

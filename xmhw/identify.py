@@ -54,8 +54,8 @@ def feb29(ts, dim='doy'):
          calculation of the climatology and threshold. The value of these for Feb 29 is then
          linearly interpolated from the values for Feb 28 and Mar 1.
     """
-    #return (ts.where(ts.doy.isin([59,60,61]),drop=True).mean(dim=dim).values)
-    return (ts.where(ts.doy.isin([59,61]),drop=True).mean(dim=dim).values)
+    return (ts.where(ts.doy.isin([59,60,61]),drop=True).mean(dim=dim).values)
+    #return (ts.where(ts.doy.isin([59,61]),drop=True).mean(dim=dim).values)
 
 
 def runavg(ts, w):
@@ -96,7 +96,6 @@ def dask_percentile(array, axis, q):
         drop_axis=axis)
 
 
-#@dask.delayed
 def join_gaps(st, end, events, maxGap):
     """Find gaps between mhws which are less equal to maxGap and join adjacent mhw into one event
        Input:

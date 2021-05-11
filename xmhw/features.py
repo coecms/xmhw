@@ -32,7 +32,6 @@ def mhw_df(df):
        The call_mhw_feature function groupby 'event' and reduce dataset on same dimension,
        while executin mhw_features where all characteristic of one mhw event are calculated
     """
-    #df['time'] = ts.time.to_series()
 
     # get temp, climatologies values for events
     ismhw = df.events.notna()
@@ -73,7 +72,6 @@ def mhw_features(dftime, last):
     return df
 
 
-#@dask.delayed(nout=1)
 def agg_df(df):
     """Define and aggregation dictionary to avoid apply
     """
@@ -107,7 +105,6 @@ def agg_df(df):
             duration_extreme = ('duration_extreme', 'sum') )
             # intensity_max can be used as relSeas(index_peak) in onset_decline
 
-#@dask.delayed(nout=1)
 def properties(df, relT, mabs):
     df['index_peak'] = df.event + df.relS_imax
     df['intensity_var'] = np.sqrt(df.relS_var) 
@@ -119,14 +116,12 @@ def properties(df, relT, mabs):
     return df.drop(['relS_imax', 'relS_var', 'relT_var', 'max_cat', 'mabs_var'], axis=1)
 
 
-#@dask.delayed(nout=1)
 def get_rate(relSeas_peak, relSeas_edge, period):
     """ Calculate onset/decline rate of event
     """
     return (relSeas_peak - relSeas_edge) / period
 
 
-#@dask.delayed(nout=1)
 def get_edge(relS, anom, idx, edge):
     """ Return the relative start or end of mhw to calculate respectively onset and decline 
         for onset edge = 0, anom=anom.shift('time'=1), relSeas=relSeas[0]
@@ -136,7 +131,6 @@ def get_edge(relS, anom, idx, edge):
     return 0.5*(relS + x)
 
 
-#@dask.delayed(nout=2)
 def get_period(start, end, peak, tsend):
     """ Return the onset/decline period for a mhw
     """
@@ -148,7 +142,6 @@ def get_period(start, end, peak, tsend):
     return onset_period, decline_period
 
 
-#@dask.delayed(nout=1)
 def onset_decline(df, last):
     """ Calculate rate of onset and decline for each MHW
     """
