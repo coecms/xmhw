@@ -54,8 +54,8 @@ def feb29(ts, dim='doy'):
          calculation of the climatology and threshold. The value of these for Feb 29 is then
          linearly interpolated from the values for Feb 28 and Mar 1.
     """
-    return (ts.where(ts.doy.isin([59,60,61]),drop=True).mean(dim=dim).values)
-    #return (ts.where(ts.doy.isin([59,61]),drop=True).mean(dim=dim).values)
+    #return (ts.where(ts.doy.isin([59,60,61]),drop=True).mean(dim=dim).values)
+    return (ts.where(ts.doy.isin([59,61]),drop=True).mean(dim=dim).values)
 
 
 def runavg(ts, w):
@@ -80,14 +80,13 @@ def window_roll(ts, w, tdim):
     width = 2*w+1
     dtime = {tdim: width}
     trolled = ts.rolling(**dtime, center=True).construct('wdim')
-    return trolled.stack(z=('wdim', tdim))#.reset_index('z')
+    return trolled.stack(z=('wdim', tdim))
 
 
 def dask_percentile(array, axis, q):
     """ Use dask to calculate percentile
     """
     array = array.rechunk({axis: -1})
-    #array = array.chunk({axis: -1})
     return array.map_blocks(
         np.nanpercentile,
         axis=axis,
@@ -207,7 +206,7 @@ def mhw_filter(bthresh, idxarr, minDuration=5, joinGaps=True, maxGap=2):
 def land_check(temp, tdim='time'):
     """ Stack lat/lon on new dimension cell and remove for land points
         Input:
-        temp - sst timeseries on 3D grid
+        temp - sst timeseries on multi-dimensional grid
         Return
         ts - modified timeseries with stacked lat/lon and land points removed  
     """
@@ -257,16 +256,21 @@ def annotate_ds(ds, ds_attrs, kind):
         elif c == 'events':
             ds[c]['units'] = '1'
             ds[c]['long_name'] = 'MHW event identifier: starting index' 
+        elif c == 'point':
+            continue
         else:
-            for k,v in ds_attrs[c].items():
-                ds[c].attrs[k] = v
-            #ds[c].assign_attrs(ds_attrs[c])
+            try:
+                for k,v in ds_attrs[c].items():
+                    ds[c].attrs[k] = v
+                #ds[c].assign_attrs(ds_attrs[c])
+            except:
+                print(f'issue with attributes for {c}')
     # set global attributes
     if kind == 'clim':
         # set global attributes
         ds.attrs['source'] = f'xmhw code: {github}'
         # potentially add reference to input data from original dataset
-        ds.attrs['title'] = f'Seasonal climatology and threshold calculated using xmhw code: {github}'
+        ds.attrs['title'] = f'Seasonal climatology and threshold calculated to detect marine heatwaves following the Hobday et al. (2016) definition'
         ds.attrs['history'] = f'{date.today()}: calculated using xmhw code {github}'
         ds.thresh.attrs['units'] = uts 
         ds.seas.attrs['units'] = uts 
@@ -275,8 +279,8 @@ def annotate_ds(ds, ds_attrs, kind):
     else:
         ds.event.attrs['units'] = '1' 
         ds.event.attrs['long_name'] = 'MHW event identifier: starting index' 
-        #ds.duration.attrs['long_name'] = 'MHW duration' 
-        #ds.duration.attrs['units'] = 'day' 
+        ds.duration.attrs['long_name'] = 'MHW duration in number of days' 
+        ds.duration.attrs['units'] = '1' 
         ds.intensity_max.attrs['long_name'] = 'MHW maximum (peak) intensity relative to seasonal climatology' 
         ds.intensity_max.attrs['units'] = uts 
         ds.intensity_mean.attrs['long_name'] = 'MHW mean intensity relative to seasonal climatology' 
@@ -285,6 +289,14 @@ def annotate_ds(ds, ds_attrs, kind):
         ds.intensity_var.attrs['units'] = uts 
         ds.intensity_cumulative.attrs['long_name'] = 'MHW cumulative intensity relative to seasonal climatology' 
         ds.intensity_cumulative.attrs['units'] = f'{uts} day' 
+        ds.severity_max.attrs['long_name'] = 'MHW maximum (peak) severity relative to seasonal climatology' 
+        ds.severity_max.attrs['units'] = uts 
+        ds.severity_mean.attrs['long_name'] = 'MHW mean severity relative to seasonal climatology' 
+        ds.severity_mean.attrs['units'] = uts 
+        ds.severity_var.attrs['long_name'] = 'MHW severity variability relative to seasonal climatology' 
+        ds.severity_var.attrs['units'] = uts 
+        ds.severity_cumulative.attrs['long_name'] = 'MHW cumulative severity relative to seasonal climatology' 
+        ds.severity_cumulative.attrs['units'] = f'{uts} day' 
         ds.rate_onset.attrs['long_name'] = 'MHW onset rate' 
         ds.rate_onset.attrs['units'] = f'{uts} day-1' 
         ds.rate_decline.attrs['long_name'] = 'MHW decline rate' 
@@ -305,13 +317,18 @@ def annotate_ds(ds, ds_attrs, kind):
         ds.intensity_var_abs.attrs['units'] = uts 
         ds.intensity_cumulative_abs.attrs['long_name'] = 'MHW cumulative intensity absolute magnitude' 
         ds.intensity_cumulative_abs.attrs['units'] = f'{uts} day' 
-        ds.category.attrs['long_name'] = 'MHW category based on peak intensity: Moderate, Strong, Severe or Extreme' 
-        ds.duration_moderate.attrs['long_name'] = 'Number of days falling in category moderate' 
+        # should be treated as flags from CF point of view?
+        ds.category.attrs['long_name'] = 'MHW category based on peak intensity: 1: Moderate, 2: Strong, 3: Severe or 4: Extreme' 
+        ds.duration_moderate.attrs['long_name'] = 'Number of days falling in category Moderate' 
         ds.duration_moderate.attrs['units'] = '1' 
-        ds.duration_strong.attrs['long_name'] = 'Number of days falling in category strong' 
+        ds.duration_strong.attrs['long_name'] = 'Number of days falling in category Strong' 
         ds.duration_strong.attrs['units'] = '1' 
-        ds.duration_severe.attrs['long_name'] = 'Number of days falling in category severe' 
+        ds.duration_severe.attrs['long_name'] = 'Number of days falling in category Severe' 
         ds.duration_severe.attrs['units'] = '1' 
-        ds.duration_extreme.attrs['long_name'] = 'Number of days falling in category extreme' 
+        ds.duration_extreme.attrs['long_name'] = 'Number of days falling in category Extreme' 
         ds.duration_extreme.attrs['units'] = '1' 
+        # set global attributes
+        ds.attrs['source'] = f'xmhw code: {github}'
+        ds.attrs['title'] = f'Marine heatwave events identified applying the Hobday et al. (2016) marine heat wave definition'
+        ds.attrs['history'] = f'{date.today()}: calculated using xmhw code {github}'
     return ds

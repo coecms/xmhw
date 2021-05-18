@@ -95,6 +95,7 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
         ts = -1.*ts
 
     # Pad missing values for all consecutive missing blocks of length <= maxPadLength
+    # In Eric this happens regardless??
     if maxPadLength:
         ts = pad(ts, maxPadLength=maxPadLength)
 
@@ -146,8 +147,9 @@ def calc_thresh(ts, windowHalfWidth, pctile, smoothPercentile,
                        .reduce(np.nanmean)).compute()
 
     # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
-    thresh_climYear.loc[dict(doy=59)] = feb29(thresh_climYear)
-    seas_climYear.loc[dict(doy=59)] = feb29(seas_climYear)
+    # add this is done only if calendar include 29Feb 
+    thresh_climYear.loc[dict(doy=60)] = feb29(thresh_climYear)
+    seas_climYear.loc[dict(doy=60)] = feb29(seas_climYear)
     # Smooth if desired
     if smoothPercentile:
         # If the length of year is < 365/366 (e.g. a 360 day year from a Climate Model)
@@ -245,6 +247,7 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     seas = se.sel(doy=ts.doy)
 
     # Pad missing values for all consecutive missing blocks of length <= maxPadLength
+    # maybe this should be done regardless?
     if maxPadLength:
         ts = pad(ts, maxPadLength=maxPadLength)
     # Flip temp time series if detecting cold spells
@@ -264,7 +267,6 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # Build a pandas series with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
     idxarr = pd.Series(data=np.arange(len(ds[tdim])), index=ds.time.values)
-    start = time.process_time()
     mhwls = []
     for c in ds.cell:
         mhwls.append( define_events(ds.sel(cell=c), idxarr,
@@ -272,11 +274,24 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     results = dask.compute(mhwls)
     mhw = xr.concat(results[0], dim=ds.cell).unstack('cell')
     del results 
+    # if point dimension was added in land_check remove
+    mhw.squeeze(drop=True)
 
     # Flip climatology and intensities in case of cold spell detection
     if coldSpells:
         mhw = flip_cold(mhw)
-
+    
     mhw  = annotate_ds(mhw, ds_attrs, 'mhw')
+    # add all parameters used to global attributes 
+    params = f"""MHW detected using:
+    {minDuration} days of minimum duration;
+        where original timeseries had missing values interpolation was used to fill gaps;"""
+    if  maxPadLength:
+        params = params + f"; if gaps were more than {maxPadLength} days long, thye were left as NaNs"
+    if coldSpells:
+        params = params + f"; cold events were detected instead of heat events"
+    if joinAcrossGaps:
+        params = params + f";  events separated by {maxGap} or less days were joined"
+    ds.attrs['xmhw_parameters'] = params 
     return mhw 
 

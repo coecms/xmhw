@@ -48,15 +48,20 @@ def mhw_df(df):
     df['time'] = df.index
     df['seas'] = mhw_seas
     df['thresh'] = mhw_thresh
-    df['relSeas'] = mhw_temp - mhw_seas
-    df['relThresh'] = mhw_temp - mhw_thresh
-    df['relThreshNorm'] = (mhw_temp - mhw_thresh) / (mhw_thresh - mhw_seas)
+    t_seas = mhw_temp - mhw_seas
+    t_thresh = mhw_temp - mhw_thresh
+    thresh_seas = mhw_thresh - mhw_seas
+    df['relSeas'] = t_seas
+    df['relThresh'] = t_thresh
+    df['relThreshNorm'] = t_thresh / thresh_seas
+    # add severity
+    df['severity'] = t_seas / -(thresh_seas)
     # adding this so i can use it in groupby !!
     df['cats'] = np.floor(1. + df.relThreshNorm)
-    df['duration_moderate'] = df.cats.where(df.cats == 1)
-    df['duration_strong'] = df.cats.where(df.cats == 2)
-    df['duration_severe'] = df.cats.where(df.cats == 3)
-    df['duration_extreme'] = df.cats.where(df.cats == 4)
+    df['duration_moderate'] = df.cats == 1.
+    df['duration_strong'] = df.cats == 2.
+    df['duration_severe'] = df.cats == 3.
+    df['duration_extreme'] = df.cats >= 4.
     # if I remove this then I need to find a way to pass this series to onset/decline
     df['mabs'] = mhw_temp
     return df
@@ -71,17 +76,23 @@ def mhw_features(dftime, last):
     df = onset_decline(df, last)    
     return df
 
+def unique_dropna(s):
+    """Apply dropna to series before calling unique so it will return only non NaN values
+    """
+    return s.dropna().unique()
 
 def agg_df(df):
     """Define and aggregation dictionary to avoid apply
     """
     return df.groupby('events').agg(
             event = ('events', 'first'),
-            index_start = ('start', 'nunique'),
-            index_end = ('end', 'nunique'),
+            index_start = ('start', unique_dropna),
+            index_end = ('end', unique_dropna),
             time_start = ('time', 'first'),
             time_end = ('time', 'last'),
             relS_imax = ('relSeas', np.argmax),
+            # adding this to save the time which is the actual timeframe index, instead of the timeseries index 
+            time_peak = ('relSeas', 'idxmax'),
             # the following are needed for onset_decline
             relS_first = ('relSeas', 'first'),
             relS_last = ('relSeas', 'last'),
@@ -91,6 +102,10 @@ def agg_df(df):
             intensity_max = ('relSeas', 'max'),
             intensity_mean = ('relSeas', 'mean'),
             intensity_cumulative = ('relSeas', 'sum'),
+            severity_max = ('severity', 'max'),
+            severity_mean = ('severity', 'mean'),
+            severity_cumulative = ('severity', 'sum'),
+            severity_var = ('severity', 'var'),
             relS_var = ('relSeas', 'var'),
             relT_var = ('relThresh', 'var'), 
             intensity_mean_relThresh = ('relThresh', 'mean'),
@@ -98,7 +113,7 @@ def agg_df(df):
             intensity_mean_abs = ('mabs', 'mean'),
             mabs_var = ('mabs', 'var'), 
             intensity_cumulative_abs = ('mabs', 'sum'),
-            max_cat = ('cats', 'max'), 
+            cats_max = ('cats', 'max'), 
             duration_moderate = ('duration_moderate', 'sum'),
             duration_strong = ('duration_strong', 'sum'),
             duration_severe = ('duration_severe', 'sum'),
@@ -108,12 +123,14 @@ def agg_df(df):
 def properties(df, relT, mabs):
     df['index_peak'] = df.event + df.relS_imax
     df['intensity_var'] = np.sqrt(df.relS_var) 
+    df['severity_var'] = np.sqrt(df.severity_var) 
     df['intensity_max_relThresh'] = relT.iloc[df.index_peak.values]
     df['intensity_max_abs'] = mabs.iloc[df.index_peak.values]
     df['intensity_var_relThresh'] = np.sqrt(df.relT_var) 
     df['intensity_var_abs'] = np.sqrt(df.mabs_var) 
-    df['category'] = np.minimum(df.max_cat, 4)
-    return df.drop(['relS_imax', 'relS_var', 'relT_var', 'max_cat', 'mabs_var'], axis=1)
+    df['category'] = np.minimum(df.cats_max, 4)
+    df['duration'] = df.index_end - df.index_start + 1
+    return df.drop(['relS_imax', 'relS_var', 'relT_var', 'cats_max', 'mabs_var', 'severity_var'], axis=1)
 
 
 def get_rate(relSeas_peak, relSeas_edge, period):
