@@ -130,7 +130,7 @@ def properties(df, relT, mabs):
     df['intensity_var_abs'] = np.sqrt(df.mabs_var) 
     df['category'] = np.minimum(df.cats_max, 4)
     df['duration'] = df.index_end - df.index_start + 1
-    return df.drop(['relS_imax', 'relS_var', 'relT_var', 'cats_max', 'mabs_var', 'severity_var'], axis=1)
+    return df.drop(['relS_imax', 'relS_var', 'relT_var', 'cats_max', 'mabs_var'], axis=1)
 
 
 def get_rate(relSeas_peak, relSeas_edge, period):
