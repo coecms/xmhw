@@ -176,7 +176,7 @@ def calc_thresh(ts, windowHalfWidth, pctile, smoothPercentile,
     return ds
 
 
-def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=None, coldSpells=False, tdim='time'): 
+def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=None, coldSpells=False, tdim='time', intermediate=False): 
     """
 
     Applies the Hobday et al. (2016) marine heat wave definition to an input time
@@ -201,6 +201,7 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
       mhw     Detected marine heat waves (MHWs). Each key (following list) is a
               list of length N where N is the number of detected MHWs:
               ....
+      ds      stacked dataset with sst and climatologies along time axis - Optional only if intermediate is True
 
 
     Options:
@@ -219,6 +220,7 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
       coldSpells             Boolean: specifies if the code should detect cold events instead of
                              heat events. (DEFAULT = False)
       tdim                   String: name of time dimension. (DEFAULT='time')
+      intermediate           Boolean: if True also output stacked dataset with sst and climatologies along time axis. (default: False)
     """
   
    
@@ -263,19 +265,26 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # join timeseries arrays in dataset to pass to map_blocks
     # so data can be split by chunks
     ds = xr.Dataset({'ts': ts, 'seas': seas, 'thresh': thresh, 'bthresh': bthresh})
+    ds = ds.reset_coords(drop=True)
     ds = ds.chunk(chunks={tdim: -1, 'cell': 1})
     # Build a pandas series with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
     idxarr = pd.Series(data=np.arange(len(ds[tdim])), index=ds.time.values)
     mhwls = []
     for c in ds.cell:
-        mhwls.append( define_events(ds.sel(cell=c), idxarr,
-                      minDuration, joinAcrossGaps, maxGap))
+        mhwls.append(  define_events(ds.sel(cell=c), idxarr,
+                     minDuration, joinAcrossGaps, maxGap, intermediate))
     results = dask.compute(mhwls)
-    mhw = xr.concat(results[0], dim=ds.cell).unstack('cell')
-    del results 
+    mhw_results = [r[0] for r in results[0]]
+    mhw = xr.concat(mhw_results, dim=ds.cell).unstack('cell')
+    if intermediate:
+        inter_results = [r[1] for r in results[0]]
+        mhw_inter = xr.concat(inter_results, dim=ds.cell).unstack('cell')
+        mhw_inter = mhw_inter.rename({'index': 'time'})
+        mhw_inter = mhw_inter.squeeze(drop=True)
+    #del mhw_results, inter_results 
     # if point dimension was added in land_check remove
-    mhw.squeeze(drop=True)
+    mhw = mhw.squeeze(drop=True)
 
     # Flip climatology and intensities in case of cold spell detection
     if coldSpells:
@@ -287,11 +296,14 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     {minDuration} days of minimum duration;
         where original timeseries had missing values interpolation was used to fill gaps;"""
     if  maxPadLength:
-        params = params + f"; if gaps were more than {maxPadLength} days long, thye were left as NaNs"
+        params = params + f"; if gaps were more than {maxPadLength} days long, they were left as NaNs"
     if coldSpells:
         params = params + f"; cold events were detected instead of heat events"
     if joinAcrossGaps:
         params = params + f";  events separated by {maxGap} or less days were joined"
-    ds.attrs['xmhw_parameters'] = params 
+    mhw.attrs['xmhw_parameters'] = params 
+    if intermediate:
+        mhw_inter.squeeze(drop=True)
+        return mhw, mhw_inter 
     return mhw 
 

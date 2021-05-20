@@ -44,7 +44,7 @@ def mhw_df(df):
     anom = (df.ts - df.seas)
     df['anom_plus'] = anom.shift(+1)
     df['anom_minus'] = anom.shift(-1)
-    # Adding ts, seas, thresh to dataset is only for debugging
+    # Adding ts, seas, thresh to dataframe so intemrdiate results and climatologies can be saved together
     df['time'] = df.index
     df['seas'] = mhw_seas
     df['thresh'] = mhw_thresh

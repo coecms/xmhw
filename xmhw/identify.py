@@ -135,26 +135,27 @@ def join_gaps(st, end, events, maxGap):
     return pd.concat([st.rename('start'), end.rename('end'), events], axis=1) 
 
 
-#def define_events(ds, idxarr, fevents, minDuration, joinAcrossGaps, maxGap, tdim='time'):
 @dask.delayed(nout=1)
-def define_events(ds, idxarr,  minDuration, joinAcrossGaps, maxGap):
+def define_events(ds, idxarr,  minDuration, joinAcrossGaps, maxGap, intermediate):
     """Find all MHW events of duration >= minDuration
+       if joinAcrossGaps is True than joins any event that is separated by a number of days <= maxGap
     """
-    #dfclim = ds[['thresh', 'seas']].to_dataframe()
+    # Convert xarray dataset to pandas dataframe, as groupby operation are faster in pandas
     df = ds.to_dataframe()
-    #bth = ds['bthresh'].to_series()
-    # converting to dataframe so as well as tiemseries we keep doy and time!
-    # df.bthresh: [F,F,F,F,T,T,T,T,T,F,F,...]
+    # detect events 
     dfev = mhw_filter(df.bthresh, idxarr, minDuration, joinAcrossGaps, maxGap)
-    # Prepare dataframe to get features
+    # Prepare dataframe to get features before groupby operation
     df = mhw_df(pd.concat([df,dfev], axis=1))
-    # Calculate mhw properties 
+    # Calculate mhw properties, for each event using groupby 
     dfmhw = mhw_features(df, len(ds.time)-1)
 
-    # convert back to xarray dataset and reindex so all cells have same event axis
+    # convert back to xarray dataset and reindex (?) so all cells have same event axis
     mhw = xr.Dataset.from_dataframe(dfmhw, sparse=False)
-    del ds, dfmhw, df, dfev
-    return mhw
+    mhw_inter = None
+    if intermediate:
+        df.drop(columns=['cell', 'time', 'start', 'end', 'anom_plus', 'anom_minus', 'bthresh'], inplace=True)
+        mhw_inter = xr.Dataset.from_dataframe(df, sparse=False)
+    return mhw, mhw_inter 
 
 
 def mhw_filter(bthresh, idxarr, minDuration=5, joinGaps=True, maxGap=2):
@@ -174,7 +175,6 @@ def mhw_filter(bthresh, idxarr, minDuration=5, joinGaps=True, maxGap=2):
     # shifted = [nan,0,0,0,1,1,1,1,-5,0,0,...]
     shifted = (events_map - events_map.shift(+1)).shift(-1)
 
-    #shifted.load()
     shifted.iloc[-1] = -events_map.iloc[-1]
     # select only cells where shifted is less equal to the -minDuration,
     duration = events_map.where(shifted <= -minDuration)
@@ -196,10 +196,6 @@ def mhw_filter(bthresh, idxarr, minDuration=5, joinGaps=True, maxGap=2):
         df = join_gaps(st, end, sel_events, maxGap)
     else:
         df = pd.concat([st.rename('start'), end.rename('end'), sel_events], axis=1)
-    # make sure start values are now aligned with their indexes
-    #df['start'] = idxarr.iloc[df.st]
-    #df.drop(st, axis=1, inplace=True)
-    #se = sel_events.dropna()
     return  df
 
 
