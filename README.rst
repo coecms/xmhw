@@ -17,7 +17,15 @@ Functions:
 - **detect** 
 - **block_average**  work in progress
 
+Disclaimer!!
 
+This is a work in progress, I tested both threshold and detect and these can reproduced Eric Olivier results with the data I used.
+Still I haven't extensively tested this and most unit tests in the code need updating.
+In particular the code is potentially not ready for timeseries with a 360 days calendar year
+
+I am still working on block_average.
+
+As this code uses xarray results are xarray datasets.
 -------
 Install
 -------
