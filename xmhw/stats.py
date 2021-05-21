@@ -26,7 +26,7 @@ from xmhw.identify import land_check
 from .exception import XmhwException
 
 
-def block_average(mhw, dstime=None, blockLength=1, mtime='time_start',
+def block_average(mhw, dstime=None, period=None, blockLength=1, mtime='time_start',
                   removeMissing=False, split=False):
     '''
     Inputs:
@@ -39,7 +39,7 @@ def block_average(mhw, dstime=None, blockLength=1, mtime='time_start',
       dstime            xarray dataset with 'time' dimension containing at least original sst,
                         and climatologies as optional, default is None
                         if present and is array or dataset with only 1 variable script assumes this
-                        is temp and sw_temp is set to True
+                        is ts and sw_temp is set to True
                         if present and dataset with 'thresh' and 'seas' also sw_cats is set to True
                         Best option is to pass the intermediate dataset you get from detect
       mtime             timestep to use to assign mhw to bins, default is 'time_start' to follow 
@@ -71,29 +71,48 @@ def block_average(mhw, dstime=None, blockLength=1, mtime='time_start',
 
     '''
     # Check if dstime is present and how many variables are included
+    # if dstime has only and extra coordinate on top of time than calling
+    # land_check is not necessary for dstime
+    # and the mhw 'cell' coordinate should be renamed to be consistent
     sw_temp = False
     sw_cats = False
     # currently I'm try to accept any name for tempearute as long as it is passed on its own and only temp thresh seas if they are all
     # passed as a dataset
     # might make more sense to deal with this separately and allow to indicate the names?
+    # put this ins eparate function and add option to check if cats is alredy present, then we do not need clims
     if dstime is not None:
+        dscoords = list(dstime.coords)
+        dscoords.remove('time')
+        if len(dscoords) == 1:
+            stack_coord = dscoords[0]
+        else:
+            stack_coord = 'cell'
+        period = [dstime.time.dt.year[0].values, dstime.time.dt.year[-1].values]
         sw_temp = True
         # if dstime is xarray convert it to dataset
         if 'dataarray' in str(type(dstime)):
-            dstime = xr.Dataset({'temp': dstime})
+            dstime = xr.Dataset({'ts': dstime})
         # if there is only 1 variable assume is sst sw_temp is True and sw_cats stays False 
         variables = list(dstime.keys())
         if len(variables) == 1:
-            temp_name = variables[0]
-            dstime['temp'] = dstime[temp_name].rename('temp')
+            ts_name = variables[0]
+            dstime['ts'] = dstime[ts_name].rename('ts')
+        if len(dscoords) !=1:
+            dstime['ts'] = land_check(dstime['ts'])
         # if there are 3 or more variables make sure thresh and seas are included
-        if len(variables) >= 3 and  all(x in variables for x in ['temp', 'thresh', 'seas']):
-            sw_cats = True
+        if len(variables) >= 3:
+            if all(x in variables for x in ['ts', 'thresh', 'seas']):
+                sw_cats = True
+            else:
+                sw_temp = False
 
 
     # Check if all the necessary variables are present
     if removeMissing and not sw_temp:
         print(f'To remove missing values you need to pass the original temperature timeseries')
+        return None
+    if not period and not sw_temp:
+        print(f'As the original timeseries is not available, the timeseries period as [start_year, end_year] has to be passed')
         return None
     # if split option divide events starting in one year and ending in successive in two and recalculate averages??
     # or (much eaiser if events cross a year/block assign them to block that includes most days of detected event
@@ -104,7 +123,7 @@ def block_average(mhw, dstime=None, blockLength=1, mtime='time_start',
     # create bins based on blockLength to used with groupby_bins
     # NB if the last bin has less than blockLength years, it won't be included.
     # So I'm using last-year+blockLength+1 to make sure we get a bin for last year/s included
-    bins=range(1982,2020+blockLength+1,blockLength)
+    bins=range( period[0], period[1]+blockLength+1,blockLength)
 
     # calculate with aggregation function
     blockls = []
@@ -115,7 +134,7 @@ def block_average(mhw, dstime=None, blockLength=1, mtime='time_start',
     for c in mhw.cell:
         blockls.append(call_groupby(mhw.sel(cell=c), tgroup, bins))
     results = dask.compute(blockls)
-    block = xr.concat(results[0], dim=mhw.cell)
+    block = xr.concat(results[0], dim=mhw.cell).unstack('cell')
 
 
 
@@ -123,27 +142,24 @@ def block_average(mhw, dstime=None, blockLength=1, mtime='time_start',
     if sw_temp:
         if sw_cats:
             print("Both sst and climatologies are available, calculating sst and category stats") 
-            dstime['cats'] = np.floor(1 + (dstime['temp'] - dstime['thresh']) / (dstime['thresh'] - dstime['seas'])).astype(int)
-            dstime = dstime.drop_vars([v for v in dstime.keys() if v not in ['temp','cats']])
-            if 'cell' not in dstime.coords:
+            dstime['cats'] = np.floor(1 + (dstime['ts'] - dstime['thresh']) / (dstime['thresh'] - dstime['seas'])).astype(int)
+            dstime = dstime.drop_vars([v for v in dstime.keys() if v not in ['ts','cats']])
+            if len(dscoords) != 1:
                 dstime['cats'] = land_check(dstime['cats'])
-                dstime['temp'] = land_check(dstime['temp'])
             mode = 'cats'
         else:
-            mode = 'temp'
-            if 'cell' not in dstime.coords:
-                dstime['temp'] = land_check(dstime['temp'])
-        tgroup = dstime.isel(cell=0).time.dt.year
+            mode = 'ts'
+        tgroup = dstime.isel({stack_coord: 0}).time.dt.year
         statsls = []
-        print(f'should be here')
-        for c in dstime.cell:
-            statsls.append(call_groupby(dstime.sel(cell=c), tgroup, bins, mode=mode))
+        for c in dstime[stack_coord]:
+            statsls.append(call_groupby(dstime.sel({stack_coord: c}), tgroup, bins, mode=mode))
             results = dask.compute(statsls)
-        tstats = xr.concat(results[0], dim=dstime.cell)
-        print(f"tstats, {tstats}")
+        tstats = xr.concat(results[0], dim=dstime[stack_coord])
+        if stack_coord == 'cell':
+            tstats = tstas.unstack(stack_coord)
         block = xr.merge([block, tstats])
 
-    return block.unstack('cell')
+    return block
 
 
 @dask.delayed
@@ -217,16 +233,16 @@ def agg_cats(df, tgroup, bins):
     # first use pandas.cut to separate datFrame in bins
     dfbins = pd.cut(tgroup, bins, right=False)
     return df.groupby(dfbins).agg(
-            temp_mean = ('temp', 'mean'),
-            temp_max = ('temp', 'max'),
-            temp_min = ('temp', 'min'),
+            ts_mean = ('ts', 'mean'),
+            ts_max = ('ts', 'max'),
+            ts_min = ('ts', 'min'),
             moderate_days = ('cats', lambda x: cat_days(x,1)),
             strong_days = ('cats', lambda x: cat_days(x,2)),
             severe_days = ('cats', lambda x: cat_days(x,3)),
             extreme_days = ('cats', lambda x: cat_days(x,4)))
 
 
-def agg_temp(df, tgroup, bins):
+def agg_ts(df, tgroup, bins):
     """Apply groupby on dataframe after defining an aggregation dictionary to avoid apply groupby several times
 
        Input:
@@ -238,9 +254,9 @@ def agg_temp(df, tgroup, bins):
     # first use pandas.cut to separate datFrame in bins
     dfbins = pd.cut(tgroup, bins, right=False)
     return df.groupby(dfbins).agg(
-            temp_mean = ('temp', 'mean'),
-            temp_max = ('temp', 'max'),
-            temp_min = ('temp', 'min'))
+            ts_mean = ('ts', 'mean'),
+            ts_max = ('ts', 'max'),
+            ts_min = ('ts', 'min'))
 
 
 def find_across(mhw):
