@@ -23,12 +23,16 @@ Install
 -------
 
 
-    git clone 
-    cd xmhw
-    python setup.py install ( --user ) if you want to install it in ~/.local
+    git clone \
+    cd xmhw. \
+    python setup.py install ( --user ) \ 
+    
+    --user if you want to install it in ~/.local. \
 ---
 Use
 ---
+
+To come ...
 
 ~~~~~
 
