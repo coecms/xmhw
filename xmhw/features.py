@@ -44,7 +44,7 @@ def mhw_df(df):
     anom = (df.ts - df.seas)
     df['anom_plus'] = anom.shift(+1)
     df['anom_minus'] = anom.shift(-1)
-    # Adding ts, seas, thresh to dataset is only for debugging
+    # Adding ts, seas, thresh to dataframe so intemrdiate results and climatologies can be saved together
     df['time'] = df.index
     df['seas'] = mhw_seas
     df['thresh'] = mhw_thresh
@@ -130,7 +130,7 @@ def properties(df, relT, mabs):
     df['intensity_var_abs'] = np.sqrt(df.mabs_var) 
     df['category'] = np.minimum(df.cats_max, 4)
     df['duration'] = df.index_end - df.index_start + 1
-    return df.drop(['relS_imax', 'relS_var', 'relT_var', 'cats_max', 'mabs_var', 'severity_var'], axis=1)
+    return df.drop(['relS_imax', 'relS_var', 'relT_var', 'cats_max', 'mabs_var'], axis=1)
 
 
 def get_rate(relSeas_peak, relSeas_edge, period):
