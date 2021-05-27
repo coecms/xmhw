@@ -130,7 +130,7 @@ def block_average(mhw, dstime=None, period=None, blockLength=1, mtime='time_star
             results = dask.compute(statsls)
         tstats = xr.concat(results[0], dim=dstime[stack_coord])
         if stack_coord == 'cell':
-            tstats = tstas.unstack(stack_coord)
+            tstats = tstats.unstack(stack_coord)
         block = xr.merge([block, tstats])
 
     return block
@@ -296,3 +296,20 @@ def find_across(mhw):
 def split_event(mhw_ev):
     "If event span across two years you might wan tto split it into two and calculate separate stats"
     return mhw_ev
+
+def mhw_rank(mhwds):
+    """Rank mhw on each properties going from largest to smallest (1,.., n-events)
+    """
+    # should be absed on calendar
+    days_year = 365.25
+    #nYears = len(ts)/days_year
+    nYears = 14245/days_year
+    rank = xr.Dataset() 
+    return_period = xr.Dataset() 
+    # skip index and time variables
+    variables =  [k for k in mhwds.keys() if not any(x in k for x in ['event', 'time', 'index'])]
+    for var in variables:
+        #mhw_rank[var] = mhwds[events].sortby(mhwds[var], ascending=False)
+        rank[var] = mhwds[var].rank(dim='events')
+        return_period[var] = (nYears + 1) / rank[var]
+    return rank, return_period
