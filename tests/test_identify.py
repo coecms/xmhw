@@ -16,16 +16,19 @@
 
 #import pytest
 
-from xmhw.identify import (land_check, add_doy, window_roll, runavg,
+from xmhw.identify import (land_check, add_doy, window_roll, runavg, define_events,
                            mhw_filter, feb29, join_gaps, join_events) 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
 import numpy.testing as nptest
 import xarray.testing as xrtest
+import pandas.testing as pdtest
+
 
 def test_add_doy(oisst_ts, oisst_doy):
     doy = add_doy(oisst_ts, tdim="time").doy.values 
     nptest.assert_array_equal(doy, oisst_doy) 
+
 
 def test_feb29(oisst_ts):
     # this is testing for feb29 averaging 28 Feb and 1st of march I believe it should i nclude 29 Feb too!
@@ -33,6 +36,7 @@ def test_feb29(oisst_ts):
     a =np.array([18.2074995])
     b = feb29(ts, dim='time')
     nptest.assert_almost_equal(a, b[1,2], decimal=5) 
+
 
 def test_runavg():
     a = xr.DataArray([1,2,2,4,3,2], dims=['doy'], coords=[np.array([1,2,3,4,5,6])])
@@ -43,62 +47,60 @@ def test_runavg():
     with pytest.raises(XmhwException):
         runavg(a, 2)
 
+
 def test_window_roll(oisst_ts, tstack):
     ts = oisst_ts.sel(time=slice('2003-01-01','2003-01-03'),lat=-42.625, lon=148.125)
     array = window_roll(ts, 1, 'time')
     #assert array.z.index
     nptest.assert_almost_equal(array.values, tstack, decimal=5)
 
+
 def test_dask_percentile():
 #(array, axis, q):
     assert True
 
-def test_join_gaps(mhwfilter):
-    exceed, st, en, evs, st2, en2, evs2 = mhwfilter 
-    ds = xr.Dataset({'start': st, 'end':en, 'events': evs})
-    # testing with maxGap=3 should return identical dataset
-    ds2 = join_gaps(ds, 3)
-    xrtest.assert_equal(ds.start, ds2.start)
-    xrtest.assert_equal(ds.end, ds2.end)
-    xrtest.assert_equal(ds.events, ds2.events)
-    # testing with gap 2 should join two events
-    ds = xr.Dataset({'start': st, 'end':en, 'events': evs})
-    ds3 = join_gaps(ds, 2)
-    xrtest.assert_equal(st2, ds3.start)
-    xrtest.assert_equal(en2, ds3.end)
-    xrtest.assert_equal(evs2, ds3.events)
+
+def test_join_gaps(filter_data):
+    bthresh, idxarr, st, end, evs, st2, end2, evs2 = filter_data 
+    # testing with maxGap=2 should return identical dataset
+    df = join_gaps(st, end, evs, 2)
+    pdtest.assert_series_equal(df.start, st)
+    pdtest.assert_series_equal(df.end, end)
+    pdtest.assert_series_equal(df.events, evs)
+    # testing with gap 3 should join two events
+    df2 = join_gaps(st, end, evs, 3)
+    pdtest.assert_series_equal(df2.start, st2)
+    pdtest.assert_series_equal(df2.end, end2)
+    pdtest.assert_series_equal(df2.events, evs2)
     # testing only last two events to make sure it works with array len 1
-    ds.start[5] = np.nan
-    ds.end[5] = np.nan
-    ds.events[1:6] = np.nan
-    ds4 = join_gaps(ds, 2)
-    xrtest.assert_equal(evs2[10:], ds4.events[10:])
+    st[5] = np.nan
+    end[5] = np.nan
+    evs[1:6] = np.nan
+    df3 = join_gaps(st, end, evs, 3)
+    pdtest.assert_series_equal(df3.events[10:], evs2[10:])
 
 
-def test_mhw_filter(mhwfilter):
+def test_mhw_filter(filter_data):
     # These tests only check on 1 D to make sure it work on 2 d add extra tests
-    exceed, st, en, evs, st2, en2, evs2 = mhwfilter 
+    bthresh, idxarr, st, end, evs, st2, end2, evs2 = filter_data 
     # test with joinGaps=False
-    ds = mhw_filter(exceed, 5, joinGaps=False)
-    xrtest.assert_equal( ds.start, st)
-    xrtest.assert_equal( ds.end, en)
-    xrtest.assert_equal( ds.events, evs)
-    # test with default joinGaps True and maxGaps=2, join 2nd and 3rd events
-    ds2 = mhw_filter(exceed, 5)
-    xrtest.assert_equal( ds2.start, st2)
-    xrtest.assert_equal( ds2.end, en2)
-    xrtest.assert_equal( ds2.events, evs2)
+    df = mhw_filter(bthresh, idxarr, 5, False)
+    pdtest.assert_series_equal( df.start, st)
+    pdtest.assert_series_equal( df.end, end)
+    pdtest.assert_series_equal( df.events, evs)
+    # test with default joinGaps True and maxGaps=3, join 2nd and 3rd events
+    df2 = mhw_filter(bthresh, idxarr, 5, True, 3)
+    pdtest.assert_series_equal( df2.start, st2)
+    pdtest.assert_series_equal( df2.end, end2)
+    pdtest.assert_series_equal( df2.events, evs2)
 
 
-def test_join_events():
-    evs = xr.DataArray(np.arange(20))
-    evs2 = evs.copy()
-    evs2[1:8] = 1
-    evs2[12:19] = 12
-    joined = set([(1,7),(12,18)])
+def test_join_events(join_data):
+    evs, evs2, joined = join_data
     evs3 = join_events(evs, joined)
-    xrtest.assert_equal(evs2, evs3)
+    pdtest.assert_series_equal(evs2, evs3)
     assert True
+
 
 def test_land_check(oisst_ts, clim_oisst, landgrid):
     newts = land_check(oisst_ts)
@@ -115,3 +117,23 @@ def test_land_check(oisst_ts, clim_oisst, landgrid):
     # test exception raised when one of the dimension to stack has lenght 0 
     with pytest.raises(XmhwException):
         land_check(oisst_ts.sel(lat=slice(-41,-41.5)))
+
+def test_define_events(define_data, mhw_data, inter_data):
+    # test define events return two datasets if intermediate is True
+    ds, idxarr = define_data
+    mhwds = mhw_data
+    interds = inter_data
+    res = define_events(ds.isel(cell=0), idxarr, 5, True, 2, True)
+    results = res.compute()
+    xrtest.assert_allclose(results[0], mhwds)
+    xrtest.assert_allclose(results[1], interds)
+
+    # test define events return one dataset only if intemediate is False, as default
+    res = define_events(ds.isel(cell=0), idxarr, 5, True, 2, False)
+    results = res.compute()
+    xrtest.assert_allclose(results[0], mhwds)
+    assert results[1] is None
+
+
+def test_annotate_ds():
+    pass
