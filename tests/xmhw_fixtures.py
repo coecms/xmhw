@@ -171,14 +171,14 @@ def mhw_data():
         'duration_extreme': [0],
         'index_peak': [5.0],
         'intensity_var': [0.809938],
-        'intensity_max_relThresh': [np.nan],
-        'intensity_max_abs': [np.nan],
+        'intensity_max_relThresh': [1.40],
+        'intensity_max_abs': [19.6],
         'intensity_var_relThresh': [0.437035],
         'intensity_var_abs': [0.9495613],
         'category': [2.0],
         'duration': [6.0],
-        'rate_onset': [0.4818182],
-        'rate_decline': [4.6]}
+        'rate_onset': [0.5888889],
+        'rate_decline': [1.5333333]}
     for k,v in vars_dict.items():
         mhwds[k] = xr.DataArray(data=v, dims=['events'], coords={'events': [1]})
     return mhwds
