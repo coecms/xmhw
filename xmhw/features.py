@@ -94,6 +94,8 @@ def agg_df(df):
             # adding this to save the time which is the actual timeframe index, instead of the timeseries index 
             time_peak = ('relSeas', 'idxmax'),
             # the following are needed for onset_decline
+            # anom_plus is (sst -seas) shifted 1 day ahead 
+            # anom_minus is (sst -seas) shifted 1 day back 
             relS_first = ('relSeas', 'first'),
             relS_last = ('relSeas', 'last'),
             anom_first = ('anom_plus', 'first'),
@@ -150,12 +152,19 @@ def get_edge(relS, anom, idx, edge):
 
 def get_period(start, end, peak, tsend):
     """ Return the onset/decline period for a mhw
+        For onset if event starts on 1st day of timeseries, then:
+          if peak also on 1 st day, onset period is 1 day else period=peak.
+          In any other case period = peak + 0.5
+        For decline if event ends on last day of timeseries, then:
+          if peak also on last day, onset period is 1 day else period=(end - start - peak).
+          In any other case period = (end - start -peak) + 0.5
+       
     """
     esp = end - start - peak
-    x = peak.where(peak == 0, 1)
-    onset_period = x.where(start != 0, x + 0.5)
+    x = peak.where(peak != 0, 1)
+    onset_period = x.where(start == 0, x + 0.5)
     y = esp.where(peak != tsend, 1)
-    decline_period = y.where(end != tsend, y + 0.5)
+    decline_period = y.where(end == tsend, y + 0.5)
     return onset_period, decline_period
 
 

@@ -226,7 +226,6 @@ def land_check(temp, tdim='time'):
 
 def join_events(events, joined):
     """ Set right value for joined events """
-    #events.load()
     for s,e in joined:
         events.iloc[int(s):int(e)+1] = s
     return events

@@ -15,74 +15,40 @@
 # limitations under the License.
 
 
-from xmhw.features import (group_function, mhw_ds, index_cat, cat_duration, categories,
-                           get_rate, get_period, get_edge, onset_decline, mhw_features) 
+from xmhw.features import (mhw_df, properties, unique_dropna, agg_df, get_rate,
+                           get_period, get_edge, onset_decline, mhw_features, flip_cold) 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
 import numpy.testing as nptest
 import xarray.testing as xrtest
 
 
-def test_group_function():
-    # This is only testing the option where no extxra argument is passed
-    event = np.arange(20)
-    event[:3] = 1
-    event[3:10] = 2
-    event[10:] = 3 
-    a = xr.DataArray(np.arange(20), dims=["event"], coords={"event": event})
-    amax = xr.DataArray([2.,9.,19.], dims=["event"], coords={"event": [1,2,3]})
-    xrtest.assert_equal( group_function(a, np.max), amax)
-
-def test_index_cat():
-    a = np.array([0,2,0,2,3,4,6])
-    b = np.array([0,2,0,2,3,1,1])
-    assert index_cat(a) == 4 
-    assert index_cat(b) == 3 
-
-
-def test_cat_duration():
-    a = np.array([1,2,1,1,3,2,1])
-    assert cat_duration(a,arg=1) == 4  
-    assert cat_duration(a,arg=2) == 2  
-    assert cat_duration(a,arg=3) == 1  
-    assert cat_duration(a,arg=4) == 0  
-
-
 def test_mhw_features():
     # testing to check that with all-nan array calculation skipped and np.nan assigned
-    ds = xr.Dataset()
-    for var in ['start','end','anom_plus', 'anom_minus', 'seas', 'ts',
-            'thresh', 'events', 'relThresh', 'relSeas', 'relThreshNorm', 'mabs']:
-        ds[var] = xr.DataArray([np.nan, np.nan, np.nan], dims=['time'], coords=[np.arange(3)])
-    ds = mhw_features(ds, 'time', 321)
-    assert np.isnan( ds.start_idx.values )
+    df = pd.DataFrame()
+    #for var in ['start','end','anom_plus', 'anom_minus', 'seas', 'ts',
+    #        'thresh', 'events', 'relThresh', 'relSeas', 'relThreshNorm', 'mabs']:
+    #    df[var] = pd.Series([np.nan, np.nan, np.nan], dims=['time'], coords=[np.arange(3)])
+    #df = mhw_features(df,  321)
+    #assert np.isnan( df.start_idx.values )
+    pass
 
 
-def test_categories():
-    ds = xr.Dataset()
-    ds['relThreshNorm'] = xr.DataArray([1.2, 0.9, 2.3, 1.5, 0.8, 0.7, 1.6, 2.1])
-    ds = categories(ds)
-    nptest.assert_array_equal(ds['category'], np.array(['Severe']) )
-    #nptest.assert_array_equal(ds['category'], np.array([3.])) 
-    nptest.assert_array_equal( ds['duration_moderate'], np.array([3.]) )
-    nptest.assert_array_equal( ds['duration_strong'], np.array([3.]) )
-    nptest.assert_array_equal( ds['duration_severe'], np.array([2.]) )
-    nptest.assert_array_equal( ds['duration_extreme'], np.array([0.]) )
-
-
-def test_onset_decline(rates):
+def test_onset_decline(rates_data):
     # testing that with  all-nan array calculations are skipped and np.nan are assigned
-    ds, onset, decline = rates
-    ds = onset_decline(ds, 321)
-    nptest.assert_almost_equal(ds.rate_decline.values, decline)
-    nptest.assert_almost_equal(ds.rate_onset.values, onset)
+    df, onset, decline = rates_data
+    df = onset_decline(df, 321)
+    nptest.assert_almost_equal(df.rate_decline.values, decline)
+    nptest.assert_almost_equal(df.rate_onset.values, onset)
 
 
 def test_get_edge():
-    # test for idx != edge 
-    assert get_edge(2.3, 1.7, 2, 0) == 2.0
-    # test for idx == edge
-    assert get_edge(2.3, 1.7, 0, 0) == 2.3
+    d = {'c1': [2.3, 2.3], 'c2': [1.7, 1.7], 'c3': [2,0]}
+    df = pd.DataFrame(data=d)
+    # test for idx != edge on 1st row and idx=edge on 2nd row 
+    edges = get_edge(df['c1'], df['c2'], df['c3'], 0) 
+    assert edges[0] == 2.0
+    assert edges[1] == 2.3
 
 
 def test_get_period():
@@ -112,7 +78,7 @@ def test_get_rate():
     xrtest.assert_allclose( result, get_rate(peak, edge, period))
 
 
-def flip_cold():
+def test_flip_cold():
     ds = xr.Dataset()
     y = xr.DataArray([1., 2., np.nan], dims=['x'], coords=[np.arange(3)])
     z = xr.DataArray([-1., -2., np.nan], dims=['x'], coords=[np.arange(3)])
@@ -124,3 +90,11 @@ def flip_cold():
     xrtest.assert_equal(ds2['intensity_var_dummy'], y) 
     xrtest.assert_equal(ds2['dummy'], y) 
 
+def test_unique_dropna():
+    pass
+
+def test_agg_df():
+    pass
+
+def test_properties():
+    pass

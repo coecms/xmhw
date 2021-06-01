@@ -81,31 +81,9 @@ def block_average(mhw, dstime=None, period=None, blockLength=1, mtime='time_star
     # might make more sense to deal with this separately and allow to indicate the names?
     # put this ins eparate function and add option to check if cats is alredy present, then we do not need clims
     if dstime is not None:
-        dscoords = list(dstime.coords)
-        dscoords.remove('time')
-        if len(dscoords) == 1:
-            stack_coord = dscoords[0]
-        else:
-            stack_coord = 'cell'
+        dstime, sw_cats, sw_temp = check_variables(dstime)
+        dstime, stack_coord = check_coordinates(dstime)
         period = [dstime.time.dt.year[0].values, dstime.time.dt.year[-1].values]
-        sw_temp = True
-        # if dstime is xarray convert it to dataset
-        if 'dataarray' in str(type(dstime)):
-            dstime = xr.Dataset({'ts': dstime})
-        # if there is only 1 variable assume is sst sw_temp is True and sw_cats stays False 
-        variables = list(dstime.keys())
-        if len(variables) == 1:
-            ts_name = variables[0]
-            dstime['ts'] = dstime[ts_name].rename('ts')
-        if len(dscoords) !=1:
-            dstime['ts'] = land_check(dstime['ts'])
-        # if there are 3 or more variables make sure thresh and seas are included
-        if len(variables) >= 3:
-            if all(x in variables for x in ['ts', 'thresh', 'seas']):
-                sw_cats = True
-            else:
-                sw_temp = False
-
 
     # Check if all the necessary variables are present
     if removeMissing and not sw_temp:
@@ -142,10 +120,6 @@ def block_average(mhw, dstime=None, period=None, blockLength=1, mtime='time_star
     if sw_temp:
         if sw_cats:
             print("Both sst and climatologies are available, calculating sst and category stats") 
-            dstime['cats'] = np.floor(1 + (dstime['ts'] - dstime['thresh']) / (dstime['thresh'] - dstime['seas'])).astype(int)
-            dstime = dstime.drop_vars([v for v in dstime.keys() if v not in ['ts','cats']])
-            if len(dscoords) != 1:
-                dstime['cats'] = land_check(dstime['cats'])
             mode = 'cats'
         else:
             mode = 'ts'
@@ -156,10 +130,65 @@ def block_average(mhw, dstime=None, period=None, blockLength=1, mtime='time_star
             results = dask.compute(statsls)
         tstats = xr.concat(results[0], dim=dstime[stack_coord])
         if stack_coord == 'cell':
-            tstats = tstas.unstack(stack_coord)
+            tstats = tstats.unstack(stack_coord)
         block = xr.merge([block, tstats])
 
     return block
+
+
+def check_variables(dstime):
+    """Check dstime variables and coordinates to make sure it will work and to determine
+       what stats can be calculated
+       If dstime type if array convert to dataset
+       If only one variable assume is sst and make sure is named 'ts'
+       If more than one variable:
+            check if cats is present, if yes, use it to calculate categories stats and set sw_cats to True
+            if not check if 'ts', 'thresh' and 'seas' are presents and calculate cats from them, set sw_cats to True
+            if neither of the above option is True we cannot use dstime, print warning and set both sw_temp and sw_cats to False
+    """
+    # if the user passed dstime the assumption is at least sst timeseries is present, so sw_temp is set to True
+    # if dstime is DataArray convert it to dataset
+    sw_temp = True
+    sw_cats = False
+    if 'dataarray' in str(type(dstime)):
+        dstime = xr.Dataset({'ts': dstime})
+
+    # check variable/s names , if there is only variable we can use it even if name is not 'ts'
+    # else if there is more than 1  variable:
+    # 1 - check if cats is present, if yes set sw_cats to True
+    # 2 - else if cats is not present, check if all 'ts', 'thresh' and 'seas' are included and calculate cats from them
+    # 3 - else if we cannot calculate cats make sure 'ts' is present if not set sw_temp to False and print warning
+
+    variables = list(dstime.keys())
+    if len(variables) == 1:
+        ts_name = variables[0]
+        dstime['ts'] = dstime[ts_name].rename('ts')
+    elif 'cats' in variables:
+        sw_cats = True
+    elif all(x in variables for x in ['ts', 'thresh', 'seas']):
+        sw_cats = True
+        dstime['cats'] = np.floor(1 + (dstime['ts'] - dstime['thresh']) / (dstime['thresh'] - dstime['seas'])).astype(int)
+    elif 'ts' not in variables:
+            sw_temp = False
+            print("We cannot identify which variable is the sst timeseries as it is not named 'ts'")
+    dstime = dstime.drop_vars([v for v in dstime.keys() if v not in ['ts','cats']])
+    return dstime, sw_cats, sw_temp 
+
+
+def check_coordinates(dstime):
+    # First check if we need to stack coordinates before passing data to loop
+    # We assume that if ther eis only another coordinate apart from time there is no need to run a land_check
+    # If there are more than 1 coordinates left than we need to stach the arrays before passing them to loop
+    dscoords = list(dstime.coords)
+    dscoords.remove('time')
+    if len(dscoords) == 1:
+        stack_coord = dscoords[0]
+    else:
+        stack_coord = 'cell'
+        dstime = land_check(dstime)
+        #if sw_cats:
+        #    dstime['cats'] = land_check(dstime['cats'])
+    return dstime, stack_coord
 
 
 @dask.delayed
@@ -267,3 +296,20 @@ def find_across(mhw):
 def split_event(mhw_ev):
     "If event span across two years you might wan tto split it into two and calculate separate stats"
     return mhw_ev
+
+def mhw_rank(mhwds):
+    """Rank mhw on each properties going from largest to smallest (1,.., n-events)
+    """
+    # should be absed on calendar
+    days_year = 365.25
+    #nYears = len(ts)/days_year
+    nYears = 14245/days_year
+    rank = xr.Dataset() 
+    return_period = xr.Dataset() 
+    # skip index and time variables
+    variables =  [k for k in mhwds.keys() if not any(x in k for x in ['event', 'time', 'index'])]
+    for var in variables:
+        #mhw_rank[var] = mhwds[events].sortby(mhwds[var], ascending=False)
+        rank[var] = mhwds[var].rank(dim='events')
+        return_period[var] = (nYears + 1) / rank[var]
+    return rank, return_period
