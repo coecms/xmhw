@@ -126,8 +126,8 @@ def properties(df, relT, mabs):
     df['index_peak'] = df.event + df.relS_imax
     df['intensity_var'] = np.sqrt(df.relS_var) 
     df['severity_var'] = np.sqrt(df.severity_var) 
-    df['intensity_max_relThresh'] = relT.iloc[df.index_peak.values]
-    df['intensity_max_abs'] = mabs.iloc[df.index_peak.values]
+    df['intensity_max_relThresh'] = relT[df.time_peak].values
+    df['intensity_max_abs'] = mabs[df.time_peak].values
     df['intensity_var_relThresh'] = np.sqrt(df.relT_var) 
     df['intensity_var_abs'] = np.sqrt(df.mabs_var) 
     df['category'] = np.minimum(df.cats_max, 4)
@@ -171,7 +171,8 @@ def get_period(start, end, peak, tsend):
 def onset_decline(df, last):
     """ Calculate rate of onset and decline for each MHW
     """
-    onset_period, decline_period = get_period(df.index_start, df.index_end, df.index_peak, last)
+    rel_index_peak = df.index_peak - df.index_start
+    onset_period, decline_period = get_period(df.index_start, df.index_end, rel_index_peak, last)
     relSeas_start = get_edge(df.relS_first, df.anom_first, df.index_start, 0)
     relSeas_end = get_edge(df.relS_last, df.anom_last, df.index_end, last)
     df['rate_onset'] =  get_rate(df.intensity_max, relSeas_start, onset_period)
