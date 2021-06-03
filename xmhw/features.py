@@ -153,11 +153,22 @@ def get_edge(relS, anom, idx, edge):
 def get_period(start, end, peak, tsend):
     """ Return the onset/decline period for a mhw
         For onset if event starts on 1st day of timeseries, then:
-          if peak also on 1 st day, onset period is 1 day else period=peak.
+          if peak on 1 st day of event, onset period is 1 day else period=peak.
           In any other case period = peak + 0.5
         For decline if event ends on last day of timeseries, then:
-          if peak also on last day, onset period is 1 day else period=(end - start - peak).
+          if peak on last day of event, onset period is 1 day else period=(end - start - peak).
           In any other case period = (end - start -peak) + 0.5
+        NB that start and end are indexes respect to the entire timeseries and peak is index from start of event
+           so peak = index_peak - index_start
+        
+        Input:
+            start - index of start of event along timeseries (series)
+            end - index of end of event along timeseries (series)
+            peak - index of peak of event respect the event itself (ie index_peak - index_start) (series)
+            tsend - last index of timeseries (int)
+        Return:
+            onset_period - series
+            decline_period - series
        
     """
     esp = end - start - peak
