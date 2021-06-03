@@ -52,7 +52,6 @@ def test_get_edge():
 
 
 def test_get_period():
-#    def get_period(start, end, peak, tsend):
     start = xr.DataArray([0, 8, 18])
     end =  xr.DataArray([4, 15, 25])
     # test where start=peak=0

@@ -121,7 +121,7 @@ def rates_data():
             'relS_first': [2.3], 'relS_last': [1.8], 'intensity_max': [3.1], 
             'anom_first': [0.3], 'anom_last': [0.2]}
     df = pd.DataFrame(d)
-    return [df, np.array([0.21176470]), np.array([-4.20])]
+    return [df, np.array([0.32727273]), np.array([0.84])]
 
 
 @pytest.fixture
