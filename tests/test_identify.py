@@ -17,7 +17,7 @@
 #import pytest
 
 from xmhw.identify import (land_check, add_doy, window_roll, runavg, define_events,
-                           mhw_filter, feb29, join_gaps, join_events) 
+                           mhw_filter, feb29, get_calendar, join_gaps, join_events) 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
 import numpy.testing as nptest
@@ -137,3 +137,12 @@ def test_define_events(define_data, mhw_data, inter_data):
 
 def test_annotate_ds():
     pass
+
+def test_get_calendar(calendars):
+    noleap, all_leap, day_365, day_366, gregorian, standard, julian, proleptic_gregorian, ndays_year = calendars 
+    del calendars
+    # test retrieving calendar attribute
+    for calendar,timerange in locals().items():
+        assert get_calendar(timerange) == ndays_year[calendar]
+    # test guessing number of days per year if calendar not present
+    # test working with different calendars
