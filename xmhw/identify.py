@@ -47,6 +47,40 @@ def add_doy(ts, tdim="time"):
     ts.coords['doy'] = doy.chunk({tdim: -1})
     return ts
 
+def get_calendar(tdim):
+    """Retrieve calendar information or try to guess number of days in a year
+       Input:
+           tdim - time dimension associated with input timeseries - xarray.DataArray
+       Return:
+           ndays_year - number of days in a year of timeseries - float
+
+    """
+    # define a dictionary mapping calendar to ndays_year
+    # check if calendar is part of the time dimension attributes
+    # my assumptions here are Julian can be ignored at best from 1901 onwards we could add 13 days and consider it gregorian
+    # gregorian, standard, proleptic_gregorian are all the same ,as differences happens in the distant past
+    # for these we ant to use add_doy
+    # for 360/ 365 /366 we need different approach, they all can stay as they are but I should then use the original day ofyear admititng this is calculated differently and consistently each time
+    ndays = {'standard': 365.25, 'gregorian': 365.25, 'proleptic_gregorian': 365.25, 'all_leap': 366,
+            'no_leap': 365, '365_day': 365, '360_day': 360, 'julian': 365.25}
+    try:
+        calendar = tdim.econding['calendar']
+    except:
+        calendar='' 
+    if calendar == '':
+        if 'calendar' in tdim.attrs:
+            calendar = tdim.calendar
+            if calendar in ['360', '365', '366']:
+                calendar = f'{calendar}_day'
+            elif calendar == 'leap':
+                calendar = 'standard'
+    if calendar not in ndays.keys():
+        # try to work out from array whatit could be
+        ndays_year = 365.25 # just to retunr something now
+    else:
+        ndays_year = ndays[calendar] 
+    return ndays_year
+
 
 def feb29(ts, dim='doy'):
     """
@@ -257,9 +291,8 @@ def annotate_ds(ds, ds_attrs, kind):
             try:
                 for k,v in ds_attrs[c].items():
                     ds[c].attrs[k] = v
-                #ds[c].assign_attrs(ds_attrs[c])
             except:
-                print(f'issue with attributes for {c}')
+                XmhwException(f"Could not retrieve original attributes for {c}, add attributes manually to final dataset")
     # set global attributes
     if kind == 'clim':
         # set global attributes
@@ -327,3 +360,4 @@ def annotate_ds(ds, ds_attrs, kind):
         ds.attrs['title'] = f'Marine heatwave events identified applying the Hobday et al. (2016) marine heat wave definition'
         ds.attrs['history'] = f'{date.today()}: calculated using xmhw code {github}'
     return ds
+

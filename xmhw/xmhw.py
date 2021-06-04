@@ -23,7 +23,7 @@ import dask
 import sys
 import time
 from .identify import (join_gaps, define_events, runavg, dask_percentile, window_roll,
-                      land_check, feb29, add_doy, annotate_ds) 
+                      land_check, feb29, add_doy, get_calendar, annotate_ds) 
 from .features import flip_cold
 from .exception import XmhwException
 
@@ -73,6 +73,9 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     # check smooth percentile window width is odd
     if smoothPercentileWidth%2 == 0:
         raise XmhwException("smoothPercentileWidth should be odd")
+    # check that time dimension (tdim) is present
+    if tdim not in temp.dims: 
+        raise XmhwException(f"{tdim} dimension not present, default is 'time' or pass as tdim='time_dimension_name'")
 
     # Set climatology period, if unset use full range of available data
     if all(climatologyPeriod):
@@ -82,13 +85,20 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     ds_attrs = {}
     ds_attrs['ts'] = temp.attrs
     #ds_attrs[tdim+'encoding'] = temp.encoding
-    for c in temp.coords:
+    for c in temp.dims:
         ds_attrs[c] = temp[c].attrs
     # return an array stacked on all dimensions excluded time
     # Land cells are removed
     # new dimensions are (time,cell)
     ts = land_check(temp, tdim=tdim)
-    ts = add_doy(ts, tdim=tdim)
+
+    # check if the calendar attribute is present in series time dimension
+    # if not try to guess length of year
+    year_days = get_calendar(ts[tdim])
+    if year_days == 365.25:
+        ts = add_doy(ts, tdim=tdim)
+    else:
+        XMHW.Exception(f"Module is not yet set to work with a calendar different from gregorian, standard, proleptic_gregorian. NB We treat all these calendars in the same way in the assumption that the timeseries starts after 1582")
 
     # Flip ts time series if detecting cold spells
     if coldSpells:
