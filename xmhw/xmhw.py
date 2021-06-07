@@ -279,7 +279,7 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     ds = ds.chunk(chunks={tdim: -1, 'cell': 1})
     # Build a pandas series with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
-    idxarr = pd.Series(data=np.arange(len(ds[tdim])), index=ds.time.values)
+    idxarr = pd.Series(data=np.arange(len(ds[tdim])), index=ds[tdim].values)
     mhwls = []
     for c in ds.cell:
         mhwls.append(  define_events(ds.sel(cell=c), idxarr,
