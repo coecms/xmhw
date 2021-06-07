@@ -187,7 +187,7 @@ def define_events(ds, idxarr,  minDuration, joinAcrossGaps, maxGap, intermediate
     mhw = xr.Dataset.from_dataframe(dfmhw, sparse=False)
     mhw_inter = None
     if intermediate:
-        df.drop(columns=['cell', 'time', 'start', 'end', 'anom_plus', 'anom_minus', 'bthresh'], inplace=True)
+        df.drop(columns=['cell', 'time', 'start', 'end', 'anom_plus', 'anom_minus'], inplace=True)
         mhw_inter = xr.Dataset.from_dataframe(df, sparse=False)
     return mhw, mhw_inter 
 
