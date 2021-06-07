@@ -249,7 +249,7 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # return an array stacked on all dimensions excluding time
     # Land cells are removed
     # new dimensions are (time, cell)
-    ts = land_check(temp)
+    ts = land_check(temp, tdim=tdim)
     th = land_check(th, tdim='doy')
     se = land_check(se, tdim='doy')
     # assign doy 
