@@ -143,6 +143,7 @@ def test_get_calendar(calendars):
     del calendars
     # test retrieving calendar attribute
     for calendar,timerange in locals().items():
-        assert get_calendar(timerange) == ndays_year[calendar]
+        var = xr.DataArray(coords={'time': timerange}, dims=['time'])
+        assert get_calendar(var.time) == ndays_year[calendar]
     # test guessing number of days per year if calendar not present
     # test working with different calendars

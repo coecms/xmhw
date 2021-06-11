@@ -238,7 +238,8 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # check maxGap < minDuration 
     if maxGap >= minDuration:
         raise XmhwException("Maximum gap between mhw events should be smaller than event minimum duration")
-
+    # if time dimension different from time, rename it
+    temp = temp.rename({tdim: 'time'})
     # save original attributes in a dictionary to be assigned to final dataset
     ds_attrs = {}
     ds_attrs['ts'] = temp.attrs
@@ -249,7 +250,7 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # return an array stacked on all dimensions excluding time
     # Land cells are removed
     # new dimensions are (time, cell)
-    ts = land_check(temp, tdim=tdim)
+    ts = land_check(temp)
     th = land_check(th, tdim='doy')
     se = land_check(se, tdim='doy')
     # assign doy 
@@ -276,17 +277,18 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # so data can be split by chunks
     ds = xr.Dataset({'ts': ts, 'seas': seas, 'thresh': thresh, 'bthresh': bthresh})
     ds = ds.reset_coords(drop=True)
-    ds = ds.chunk(chunks={tdim: -1, 'cell': 1})
+    ds = ds.chunk(chunks={'time': -1, 'cell': 1})
     # Build a pandas series with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
-    idxarr = pd.Series(data=np.arange(len(ds[tdim])), index=ds[tdim].values)
+    idxarr = pd.Series(data=np.arange(len(ds.time)), index=ds.time.values)
     mhwls = []
     for c in ds.cell:
         mhwls.append(  define_events(ds.sel(cell=c), idxarr,
                      minDuration, joinAcrossGaps, maxGap, intermediate))
     results = dask.compute(mhwls)
     mhw_results = [r[0] for r in results[0]]
-    mhw = xr.concat(mhw_results, dim=ds.cell).unstack('cell')
+    mhw = xr.concat(mhw_results, dim=ds.cell)
+    mhw = mhw.unstack('cell')
     if intermediate:
         inter_results = [r[1] for r in results[0]]
         mhw_inter = xr.concat(inter_results, dim=ds.cell).unstack('cell')
