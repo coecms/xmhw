@@ -210,14 +210,14 @@ def inter_data():
 
 @pytest.fixture
 def calendars():
-    noleap = xr.cftime_range("2000", periods=6, calendar="noleap").to_datetimeindex()
-    all_leap = xr.cftime_range("2000", periods=6, calendar="all_leap").to_datetimeindex()
-    day_365 = xr.cftime_range("2000", periods=6, calendar="365_day").to_datetimeindex()
-    day_366 = xr.cftime_range("2000", periods=6, calendar="366_day").to_datetimeindex()
-    gregorian = xr.cftime_range("2000", periods=6, calendar="gregorian").to_datetimeindex()
-    standard = xr.cftime_range("2000", periods=6, calendar="standard").to_datetimeindex()
-    julian = xr.cftime_range("2000", periods=6, calendar="julian").to_datetimeindex()
-    proleptic = xr.cftime_range("2000", periods=6, calendar="proleptic_gregorian").to_datetimeindex()
+    noleap = xr.cftime_range("2000", periods=6, calendar="noleap")
+    all_leap = xr.cftime_range("2000", periods=6, calendar="all_leap")
+    day_365 = xr.cftime_range("2000", periods=6, calendar="365_day")
+    day_366 = xr.cftime_range("2000", periods=6, calendar="366_day")
+    gregorian = xr.cftime_range("2000", periods=6, calendar="gregorian")
+    standard = xr.cftime_range("2000", periods=6, calendar="standard")
+    julian = xr.cftime_range("2000", periods=6, calendar="julian")
+    proleptic = xr.cftime_range("2000", periods=6, calendar="proleptic_gregorian")
     ndays_year = {'noleap': 365, 'all_leap': 366, 'day_365' : 365, 'day_366': 366, 'day_360': 360,
              'gregorian': 365.25, 'standard': 365.25, 'julian': 365.25, 'proleptic': 365.25}
     return noleap, all_leap, day_365, day_366, gregorian, standard, julian, proleptic, ndays_year 

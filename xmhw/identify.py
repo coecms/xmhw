@@ -62,23 +62,26 @@ def get_calendar(tdim):
     # for these we ant to use add_doy
     # for 360/ 365 /366 we need different approach, they all can stay as they are but I should then use the original day ofyear admititng this is calculated differently and consistently each time
     ndays = {'standard': 365.25, 'gregorian': 365.25, 'proleptic_gregorian': 365.25, 'all_leap': 366,
-            'no_leap': 365, '365_day': 365, '360_day': 360, 'julian': 365.25}
-    try:
-        calendar = tdim.econding['calendar']
-    except:
-        calendar='' 
+            'noleap': 365, '365_day': 365, '360_day': 360, 'julian': 365.25}
+    if 'calendar' in tdim.encoding.keys():
+        calendar = tdim.encoding['calendar']
+    elif 'calendar' in tdim.attrs.keys():
+        calendar = tdim.attrs['calendar']
+    else:
+        calendar = getattr(tdim.values[0], 'calendar', '')
     if calendar == '':
-        if 'calendar' in tdim.attrs:
-            calendar = tdim.calendar
-            if calendar in ['360', '365', '366']:
-                calendar = f'{calendar}_day'
-            elif calendar == 'leap':
-                calendar = 'standard'
+        #calendar = infer_calendar(tdim)
+        pass
+    # if calendar was retrieved by variable attributes is possible it was wrongly defined 
+    if calendar in ['360', '365', '366']:
+        calendar = f'{calendar}_day'
+    elif calendar == 'leap':
+        calendar = 'standard'
     if calendar not in ndays.keys():
-        # try to work out from array whatit could be
+        print('calendar not in keys')
         ndays_year = 365.25 # just to retunr something now
     else:
-        ndays_year = ndays[calendar] 
+        ndays_year = ndays[calendar]
     return ndays_year
 
 
@@ -181,7 +184,7 @@ def define_events(ds, idxarr,  minDuration, joinAcrossGaps, maxGap, intermediate
     # Prepare dataframe to get features before groupby operation
     df = mhw_df(pd.concat([df,dfev], axis=1))
     # Calculate mhw properties, for each event using groupby 
-    dfmhw = mhw_features(df, len(ds.time)-1)
+    dfmhw = mhw_features(df, len(idxarr)-1)
 
     # convert back to xarray dataset and reindex (?) so all cells have same event axis
     mhw = xr.Dataset.from_dataframe(dfmhw, sparse=False)
