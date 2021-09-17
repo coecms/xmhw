@@ -1,0 +1,15 @@
+name: xmhw-dev
+
+channels:
+    - conda-forge
+    - coecms
+    - defaults
+
+dependencies:
+    - python
+    - xarray 
+    - numpy
+    - dask
+    - pandas
+    - pytest
+    - git

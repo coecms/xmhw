@@ -1,0 +1,50 @@
+package:
+    name: xmhw 
+    version: {{ GIT_DESCRIBE_TAG }}
+
+build:
+    number: {{ GIT_DESCRIBE_NUMBER }}
+
+source:
+    git_url: ../
+
+build:
+    noarch: python
+    script: "{{ PYTHON }} -m pip install . --no-deps --ignore-installed"
+
+requirements:
+    host:
+        - python
+        - pip
+        - pbr
+    run:
+        - python
+        - pandas
+        - xarray
+        - numpy
+        - dask 
+
+test:
+    source_files:
+        - setup.cfg
+        - test
+    requires:
+        - pytest
+        - numpy
+        - xarray
+        - pandas
+    imports:
+        - xmhw
+
+about:
+    home: https://github.com/coecms/xmhw
+    license: Apache 2.0
+    license_file: LICENSE-2.0.txt
+    summary: "Xarray based Marine HeatWave detection code"
+    description: |
+      XMHW identifies marine heatwaves from a timseries of 
+      Sea Surface Temperature data and calculates statistics 
+      associated to the detected heatwaves. It is based on the 
+      marineHeatWaves code <https://github.com/ecjoliver/marineHeatWaves/> 
+    doc_url:
+    dev_url: https://github.com/coecms/xmhw 
