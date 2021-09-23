@@ -222,3 +222,16 @@ def calendars():
              'gregorian': 365.25, 'standard': 365.25, 'julian': 365.25, 'proleptic': 365.25}
     return noleap, all_leap, day_365, day_366, gregorian, standard, julian, proleptic, ndays_year 
 
+
+@pytest.fixture
+def rank_data():
+    int_max = xr.DataArray(
+        [2.3, 1.2, 3.5, 2.4, 2.3],
+        dims=["events"],
+        coords={"events": [8, 18, 29, 50, 89]})
+    rank = xr.DataArray(
+        [4, 5, 1, 2, 3],
+        dims=["events"],
+        coords={"events": [8, 18, 29, 50, 89]})
+    return int_max, rank
+
