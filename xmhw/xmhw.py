@@ -123,8 +123,16 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
                        pctile, smoothPercentile, smoothPercentileWidth,
                        Ly, tdim, skipna=skipna) )
     results =dask.compute(climls)
-    #clim_results = [r[0] for r in results[0]]
-    ds = xr.concat(results[0], dim=ts.cell)
+    # Save in dataset
+    ds = xr.Dataset() 
+    thresh_results = [r[0] for r in results[0]]
+    ds['thresh'] = xr.concat(thresh_results, dim=ts.cell)
+    ds.thresh.name = 'threshold'
+    seas_results = [r[1] for r in results[0]]
+    ds['seas'] = xr.concat(seas_results, dim=ts.cell)
+    ds.seas.name = 'seasonal'
+
+    # unstack cell dimension and add attributes to ds
     ds = ds.unstack('cell')
     ds = annotate_ds(ds, ds_attrs, 'clim')
     # add all parameters used to global attributes 
@@ -187,19 +195,19 @@ def smooth_thresh(thresh_climYear, seas_climYear, smoothPercentile,
             seas_climYear = runavg(seas_climYear, smoothPercentileWidth)
 
   # fix name of arrays
-    thresh_climYear.name = 'threshold'
-    seas_climYear.name = 'seasonal'
+    #thresh_climYear.name = 'threshold'
+    #seas_climYear.name = 'seasonal'
     # Save vector indicating which points in temp are missing values
     #missing = np.isnan(ts)
     # Set all remaining missing temp values equal to the climatology
     #seas_climYear = xr.where(missing, ts, seas_climYear)
 
     # Save in dataset
-    ds = xr.Dataset() 
-    ds['thresh'] = thresh_climYear
-    ds['seas'] = seas_climYear
-    #ds['missing'] = missing
-    return ds
+    #ds = xr.Dataset() 
+    #ds['thresh'] = thresh_climYear
+    #ds['seas'] = seas_climYear
+    #return ds
+    return thresh_climYear, seas_climYear 
 
 
 def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=None, 

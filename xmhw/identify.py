@@ -112,12 +112,15 @@ def runavg(ts, w):
 
 
 def window_roll(ts, w, tdim): 
-    """Return all values falling in -w/+w window from each value in array"""
+    """Return all values falling in -w/+w window from each value in array
+       remove nans before returning stacked array
+    """
     
     width = 2*w+1
     dtime = {tdim: width}
     trolled = ts.rolling(**dtime, center=True).construct('wdim')
-    return trolled.stack(z=('wdim', tdim))
+    troll = trolled.stack(z=('wdim', tdim))
+    return troll.dropna(dim='z')
 
 
 def dask_percentile(array, axis, q):

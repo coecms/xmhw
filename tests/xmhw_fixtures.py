@@ -75,7 +75,7 @@ def oisst_doy():
 
 @pytest.fixture
 def tstack():
-    return np.array([ np.nan, 16.99, 17.39, 16.99, 17.39, 17.3 , 17.39, 17.3 , np.nan])
+    return np.array([ 16.99, 17.39, 16.99, 17.39, 17.3 , 17.39, 17.3 ])
 
 
 @pytest.fixture
