@@ -105,7 +105,15 @@ def test_join_events(join_data):
 def test_land_check(oisst_ts, clim_oisst, landgrid):
     newts = land_check(oisst_ts)
     assert newts.shape == (731, 12)
-    # should add test with timeseries with different dimension names
+    # test timeseries with with only few nans in a lat/lon cell 
+    # both for removeNans=False (default) and removeNans=True
+    fewnans = oisst_ts.copy()
+    fewnans[245,1,2] = np.nan
+    newts = land_check(fewnans, removeNans=True)
+    assert newts.shape == (731, 11)
+    newts = land_check(fewnans)
+    assert newts.shape == (731, 12)
+    # test timeseries with different dimension names
     diffdim = oisst_ts.rename({'lat': 'a', 'lon': 'b', 'time': 'c'})
     newts = land_check(diffdim, tdim='c')
     assert newts.shape == (731, 12)
@@ -139,10 +147,12 @@ def test_annotate_ds():
     pass
 
 def test_get_calendar(calendars):
-    noleap, all_leap, day_365, day_366, gregorian, standard, julian, proleptic_gregorian, ndays_year = calendars 
+    noleap, all_leap, day_365, day_366, gregorian, standard, julian, proleptic, ndays_year = calendars 
     del calendars
     # test retrieving calendar attribute
-    for calendar,timerange in locals().items():
+    cal_list =  locals()
+    cal_list.pop('ndays_year')
+    for calendar,timerange in cal_list.items():
         var = xr.DataArray(coords={'time': timerange}, dims=['time'])
         assert get_calendar(var.time) == ndays_year[calendar]
     # test guessing number of days per year if calendar not present

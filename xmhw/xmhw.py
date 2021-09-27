@@ -29,7 +29,7 @@ from .exception import XmhwException
 
 
 def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5, smoothPercentile=True, 
-                   smoothPercentileWidth=31, maxPadLength=False, coldSpells=False, Ly=False):
+                   smoothPercentileWidth=31, maxPadLength=False, coldSpells=False, Ly=False, anynans=False):
     """Calculate threshold and seasonal climatology (varying with day-of-year)
 
     Inputs:
@@ -90,7 +90,7 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     # return an array stacked on all dimensions excluded time
     # Land cells are removed
     # new dimensions are (time,cell)
-    ts = land_check(temp, tdim=tdim)
+    ts = land_check(temp, tdim=tdim, removeNans=anynans)
 
     # check if the calendar attribute is present in series time dimension
     # if not try to guess length of year
@@ -112,17 +112,13 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     # Apply window_roll to each cell.
     # Window_roll first finds for each day of the year all the ts values that falls in
     # a window +/-windowHalfWidth, then concatenates them in a new timeseries
-    # create dataset so we can preserve all dimensions
-    #ds = xr.Dataset()
-    #ds['ts'] = ts
-    #ts = ts.chunk({tdim: -1, 'cell':1})
-    #ds = ds.chunk({tdim: -1, 'cell':1})
     climls = []
     for c in ts.cell:
         climls.append( calc_thresh(ts.sel(cell=c), windowHalfWidth,
                        pctile, smoothPercentile, smoothPercentileWidth,
                        Ly, tdim) )
     results =dask.compute(climls)
+    #clim_results = [r[0] for r in results[0]]
     ds = xr.concat(results[0], dim=ts.cell)
     ds = ds.unstack('cell')
     ds = annotate_ds(ds, ds_attrs, 'clim')
@@ -139,8 +135,8 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
 
 
 @dask.delayed(nout=1)
-def calc_thresh(ts, windowHalfWidth, pctile, smoothPercentile,
-                smoothPercentileWidth, Ly, tdim):
+def calc_thresh(ts, windowHalfWidth=5, pctile=90, smoothPercentile=True,
+                smoothPercentileWidth=31, Ly=False, tdim='time'):
     """ Calculate threshold for one cell grid at the time
     """
     twindow = window_roll(ts, windowHalfWidth, tdim)
@@ -151,25 +147,40 @@ def calc_thresh(ts, windowHalfWidth, pctile, smoothPercentile,
      # Calculate threshold and seasonal climatology across years
     thresh_climYear = (twindow
                        .groupby('doy')
-                       .reduce(dask_percentile, dim='z', q=pctile)).compute()
+                       .quantile(pctile/100., dim='z', skipna=False))
+                       #.reduce(dask_percentile, dim='z', q=pctile)).compute()
+                       #.reduce(np.nanpercentile, dim='z', q=pctile))
     seas_climYear = (twindow
                        .groupby('doy')
-                       .reduce(np.nanmean)).compute()
+                       .mean(dim='z', skipna=False))
+                       #.reduce(np.nanmean)).compute()
+
+    ds = smooth_thresh(thresh_climYear, seas_climYear, smoothPercentile, smoothPercentileWidth, Ly)
+    return ds
+
+    #return thresh_climYear, seas_climYear
+
+
+def smooth_thresh(thresh_climYear, seas_climYear, smoothPercentile,
+                smoothPercentileWidth, Ly):
 
     # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
     # add this is done only if calendar include 29Feb 
-    thresh_climYear.loc[dict(doy=60)] = feb29(thresh_climYear)
-    seas_climYear.loc[dict(doy=60)] = feb29(seas_climYear)
-    # Smooth if desired
+    thresh_climYear = thresh_climYear.where(thresh_climYear.doy!=60, feb29(thresh_climYear))
+    seas_climYear = seas_climYear.where(seas_climYear.doy!=60, feb29(seas_climYear))
+    thresh_climYear = thresh_climYear.chunk({'doy': -1})
+    seas_climYear = seas_climYear.chunk({'doy': -1})
+    # If the length of year is < 365/366 (e.g. a 360 day year from a Climate Model)
     if smoothPercentile:
-        # If the length of year is < 365/366 (e.g. a 360 day year from a Climate Model)
         if Ly:
             valid = ~np.isnan(thresh_climYear)
+            thresh_climYear.where(~valid, runavg(thresh_climYear, smoothPercentileWidth))
+            seas_climYear.where(~valid, runavg(seas_climYear, smoothPercentileWidth))
         # >= 365-day year
         else:
-            valid =  np.ones(len(thresh_climYear), dtype=bool)
-        thresh_climYear[valid] = runavg(thresh_climYear[valid], smoothPercentileWidth)
-        seas_climYear[valid] = runavg(seas_climYear[valid], smoothPercentileWidth)
+            thresh_climYear = runavg(thresh_climYear, smoothPercentileWidth)
+            seas_climYear = runavg(seas_climYear, smoothPercentileWidth)
+
   # fix name of arrays
     thresh_climYear.name = 'threshold'
     seas_climYear.name = 'seasonal'
@@ -186,7 +197,8 @@ def calc_thresh(ts, windowHalfWidth, pctile, smoothPercentile,
     return ds
 
 
-def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=None, coldSpells=False, tdim='time', intermediate=False): 
+def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=None, 
+           coldSpells=False, tdim='time', intermediate=False, anynans=False): 
     """
 
     Applies the Hobday et al. (2016) marine heat wave definition to an input time
@@ -250,9 +262,9 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # return an array stacked on all dimensions excluding time
     # Land cells are removed
     # new dimensions are (time, cell)
-    ts = land_check(temp)
-    th = land_check(th, tdim='doy')
-    se = land_check(se, tdim='doy')
+    ts = land_check(temp, removeNans=anynans)
+    th = land_check(th, tdim='doy', removeNans=anynans)
+    se = land_check(se, tdim='doy', removeNans=anynans)
     # assign doy 
     ts = add_doy(ts)
     # reindex climatologies along time axis

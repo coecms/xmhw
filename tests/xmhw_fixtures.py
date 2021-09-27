@@ -192,6 +192,7 @@ def inter_data():
     vars_dict = {'ts': [15.6, 17.3, 18.2, 19.5, 19.4, 19.6, 18.1, 17.0, 15.2],
         'seas': [np.nan, 16.0, 16.2, 16.5, 16.6, 16.4, 16.6, np.nan, np.nan],
         'thresh': [np.nan, 16.7, 17.6, 17.9, 18.1, 18.2, 17.3, np.nan, np.nan],
+        'bthresh': [False, True, True, True, True, True, True, False, False],
         'events': [np.nan, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, np.nan, np.nan],
         'relSeas': [np.nan, 1.3, 2.0, 3.0, 2.79999, 3.2, 1.5, np.nan, np.nan],
         'relThresh': [np.nan, 0.6, 0.6, 1.6, 1.3, 1.4, 0.8, np.nan, np.nan],
