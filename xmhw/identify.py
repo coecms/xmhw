@@ -79,7 +79,7 @@ def get_calendar(tdim):
         calendar = 'standard'
     if calendar not in ndays.keys():
         print('calendar not in keys')
-        ndays_year = 365.25 # just to retunr something now
+        ndays_year = 365.25 # just to return something valid now
     else:
         ndays_year = ndays[calendar]
     return ndays_year
@@ -91,8 +91,8 @@ def feb29(ts, dim='doy'):
          calculation of the climatology and threshold. The value of these for Feb 29 is then
          linearly interpolated from the values for Feb 28 and Mar 1.
     """
-    #return (ts.where(ts.doy.isin([59,60,61]),drop=True).mean(dim=dim).values)
-    return (ts.where(ts.doy.isin([59,61]),drop=True).mean(dim=dim).values)
+    return (ts.where(ts.doy.isin([59,60,61]),drop=True).mean(dim=dim, skipna=True).values)
+    #return (ts.where(ts.doy.isin([59,61]),drop=True).mean(dim=dim, skipna=True).values)
 
 
 def runavg(ts, w):
@@ -106,6 +106,7 @@ def runavg(ts, w):
     Return:
       ts_smooth     Smoothed time series
     """
+    print("I am in runavg")
     if w%2 == 0:
         raise XmhwException("Running average window should be odd")
     return ts.pad(doy=(w-1)//2, mode='wrap').rolling(doy=w, center=True).mean().dropna(dim='doy')
@@ -236,7 +237,7 @@ def mhw_filter(bthresh, idxarr, minDuration=5, joinGaps=True, maxGap=2):
     return  df
 
 
-def land_check(temp, tdim='time'):
+def land_check(temp, tdim='time', removeNans=False):
     """ Stack lat/lon on new dimension cell and remove for land points
         Input:
         temp - sst timeseries on multi-dimensional grid
@@ -253,8 +254,11 @@ def land_check(temp, tdim='time'):
         if len(temp[d]) == 0:
             raise XmhwException(f'Dimension {d} has 0 lenght, exiting')
     ts = temp.stack(cell=(dims))
-    # drop cells that have all nan values along time
-    ts = ts.dropna(dim='cell',how='all')
+    # drop cells that have all/any nan values along time
+    how = 'all'
+    if removeNans:
+        how = 'any'
+    ts = ts.dropna(dim='cell',how=how)
     # if ts.cell.shape is 0 then all points are land, quit
     if ts.cell.shape == (0,):
         raise XmhwException('All points of grid are either land or NaN')
