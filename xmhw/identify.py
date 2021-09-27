@@ -106,7 +106,6 @@ def runavg(ts, w):
     Return:
       ts_smooth     Smoothed time series
     """
-    print("I am in runavg")
     if w%2 == 0:
         raise XmhwException("Running average window should be odd")
     return ts.pad(doy=(w-1)//2, mode='wrap').rolling(doy=w, center=True).mean().dropna(dim='doy')
