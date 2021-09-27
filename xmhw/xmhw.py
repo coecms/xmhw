@@ -29,7 +29,7 @@ from .exception import XmhwException
 
 
 def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5, smoothPercentile=True, 
-                   smoothPercentileWidth=31, maxPadLength=False, coldSpells=False, Ly=False, anynans=False):
+                   smoothPercentileWidth=31, maxPadLength=None, coldSpells=False, Ly=False, anynans=False, skipna=False):
     """Calculate threshold and seasonal climatology (varying with day-of-year)
 
     Inputs:
@@ -68,6 +68,11 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
       Ly                     Boolean: specifies if the length of the year is < 365/366 days (e.g. a 
                              360 day year from a climate model). This affects the calculation
                              of the climatology. (DEFAULT = False)
+      anynans                Boolean: define in land_check which cells will be dropped, by default 
+                             only ones with all nans values, if anynas is True then all cells with 
+                             even 1 nans along time dimension will be dropped (DEFAULT=False)
+      skipna                 Boolean: determines if percentile and mean will use skipna=True or False,
+                             the second is default as it is faster. (DEFAULT = False)
     """
 
     # check smooth percentile window width is odd
@@ -105,9 +110,9 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
         ts = -1.*ts
 
     # Pad missing values for all consecutive missing blocks of length <= maxPadLength
-    # In Eric this happens regardless??
+    # NB this is not happening by default and there could be issues if nan values are present in the timeseries
     if maxPadLength:
-        ts = pad(ts, maxPadLength=maxPadLength)
+        ts = ts.interpolate_na(dim=tdim, max_gap=maxPadLength)
 
     # Apply window_roll to each cell.
     # Window_roll first finds for each day of the year all the ts values that falls in
@@ -116,7 +121,7 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     for c in ts.cell:
         climls.append( calc_thresh(ts.sel(cell=c), windowHalfWidth,
                        pctile, smoothPercentile, smoothPercentileWidth,
-                       Ly, tdim) )
+                       Ly, tdim, skipna=skipna) )
     results =dask.compute(climls)
     #clim_results = [r[0] for r in results[0]]
     ds = xr.concat(results[0], dim=ts.cell)
@@ -136,7 +141,7 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
 
 @dask.delayed(nout=1)
 def calc_thresh(ts, windowHalfWidth=5, pctile=90, smoothPercentile=True,
-                smoothPercentileWidth=31, Ly=False, tdim='time'):
+                smoothPercentileWidth=31, Ly=False, tdim='time', skipna=False):
     """ Calculate threshold for one cell grid at the time
     """
     twindow = window_roll(ts, windowHalfWidth, tdim)
@@ -147,12 +152,12 @@ def calc_thresh(ts, windowHalfWidth=5, pctile=90, smoothPercentile=True,
      # Calculate threshold and seasonal climatology across years
     thresh_climYear = (twindow
                        .groupby('doy')
-                       .quantile(pctile/100., dim='z', skipna=False))
+                       .quantile(pctile/100., dim='z', skipna=skipna))
                        #.reduce(dask_percentile, dim='z', q=pctile)).compute()
                        #.reduce(np.nanpercentile, dim='z', q=pctile))
     seas_climYear = (twindow
                        .groupby('doy')
-                       .mean(dim='z', skipna=False))
+                       .mean(dim='z', skipna=skipna))
                        #.reduce(np.nanmean)).compute()
 
     ds = smooth_thresh(thresh_climYear, seas_climYear, smoothPercentile, smoothPercentileWidth, Ly)
@@ -271,10 +276,9 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     thresh = th.sel(doy=ts.doy)
     seas = se.sel(doy=ts.doy)
 
-    # Pad missing values for all consecutive missing blocks of length <= maxPadLength
-    # maybe this should be done regardless?
+    # Linearly interpolate to replace all consecutive missing blocks of length <= maxPadLength
     if maxPadLength:
-        ts = pad(ts, maxPadLength=maxPadLength)
+        ts = ts.intepolate_na(dim=tdim, max_gap=maxPadLength)
     # Flip temp time series if detecting cold spells
     if coldSpells:
         ts = -1.*ts

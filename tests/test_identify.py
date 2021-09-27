@@ -31,9 +31,11 @@ def test_add_doy(oisst_ts, oisst_doy):
 
 
 def test_feb29(oisst_ts):
-    # this is testing for feb29 averaging 28 Feb and 1st of march I believe it should i nclude 29 Feb too!
     ts = add_doy(oisst_ts, tdim="time")
-    a =np.array([18.2074995])
+    # this is testing for feb29 averaging 28 Feb and 1st of march only
+    #a =np.array([18.2074995])
+    # this is testing for feb29 averaging 28, 29 Feb and 1st of march 
+    a =np.array([18.13])
     b = feb29(ts, dim='time')
     nptest.assert_almost_equal(a, b[1,2], decimal=5) 
 
