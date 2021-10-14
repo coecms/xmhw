@@ -22,8 +22,8 @@ import pandas as pd
 import dask
 import sys
 import time
-from .identify import (join_gaps, define_events, runavg, dask_percentile, window_roll,
-                      land_check, feb29, add_doy, get_calendar, annotate_ds) 
+from .identify import (join_gaps, define_events, runavg, window_roll, calculate_thresh,
+                      land_check, feb29, add_doy, get_calendar, annotate_ds, calculate_seas)
 from .features import flip_cold
 from .exception import XmhwException
 
@@ -119,7 +119,7 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     # a window +/-windowHalfWidth, then concatenates them in a new timeseries
     climls = []
     for c in ts.cell:
-        climls.append( calc_thresh2(ts.sel(cell=c), windowHalfWidth,
+        climls.append( calc_clim(ts.sel(cell=c), windowHalfWidth,
                        pctile, smoothPercentile, smoothPercentileWidth,
                        Ly, tdim, skipna=skipna) )
     results =dask.compute(climls)
@@ -146,31 +146,7 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
     return ds
 
 
-@dask.delayed(nout=1)
-def calculate_thresh(twindow, pctile, skipna):
-    """ Calculate threshold for one cell grid at the time
-    """
-    thresh_climYear = (twindow
-                       .groupby('doy')
-                       .quantile(pctile/100., dim='z', skipna=skipna))
-    # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
-    thresh_climYear = thresh_climYear.where(thresh_climYear.doy!=60, feb29(thresh_climYear))
-    thresh_climYear = thresh_climYear.chunk({'doy': -1})
-    return thresh_climYear
-
-@dask.delayed(nout=1)
-def calculate_seas(twindow, skipna):
-    """ Calculate mean climatology for one cell grid at the time
-    """
-    seas_climYear = (twindow
-                       .groupby('doy')
-                       .mean(dim='z', skipna=skipna))
-    # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
-    seas_climYear = seas_climYear.where(seas_climYear.doy!=60, feb29(seas_climYear))
-    seas_climYear = seas_climYear.chunk({'doy': -1})
-    return seas_climYear
-
-def calc_thresh2(ts, windowHalfWidth=5, pctile=90, smoothPercentile=True,
+def calc_clim(ts, windowHalfWidth=5, pctile=90, smoothPercentile=True,
                 smoothPercentileWidth=31, Ly=False, tdim='time', skipna=False):
     """ Calculate threshold for one cell grid at the time
     """
@@ -185,78 +161,11 @@ def calc_thresh2(ts, windowHalfWidth=5, pctile=90, smoothPercentile=True,
 
     if smoothPercentile:
         thresh_climYear = smooth_clim(thresh_climYear, smoothPercentileWidth, Ly)
-        seas_climaYear = smooth_clim(seas_climYear, smoothPercentileWidth, Ly)
+        seas_climYear = smooth_clim(seas_climYear, smoothPercentileWidth, Ly)
 
     return thresh_climYear, seas_climYear
 
 
-@dask.delayed(nout=2)
-def calc_thresh(ts, windowHalfWidth=5, pctile=90, smoothPercentile=True,
-                smoothPercentileWidth=31, Ly=False, tdim='time', skipna=False):
-    """ Calculate threshold for one cell grid at the time
-    """
-    twindow = window_roll(ts, windowHalfWidth, tdim)
-
-    # rechunk twindow otherwise it is passed to dask_percentile as a numpy array 
-    twindow = twindow.chunk({'z': -1})
-    
-     # Calculate threshold and seasonal climatology across years
-    thresh_climYear = (twindow
-                       .groupby('doy')
-                       .quantile(pctile/100., dim='z', skipna=skipna))
-    seas_climYear = (twindow
-                       .groupby('doy')
-                       .mean(dim='z', skipna=skipna))
-
-    # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
-    # add this is done only if calendar include 29Feb 
-    #thresh_climYear = thresh_climYear.where(thresh_climYear.doy!=60, feb29(thresh_climYear))
-    #seas_climYear = seas_climYear.where(seas_climYear.doy!=60, feb29(seas_climYear))
-    #thresh_climYear = thresh_climYear.chunk({'doy': -1})
-    #seas_climYear = seas_climYear.chunk({'doy': -1})
-
-    if smoothPercentile:
-        thresh_climYear, seas_climaYear = smooth_thresh(thresh_climYear,
-                     seas_climYear, smoothPercentile, smoothPercentileWidth, Ly)
-
-    return thresh_climYear, seas_climYear
-
-def smooth_thresh(thresh_climYear, seas_climYear, smoothPercentile,
-                smoothPercentileWidth, Ly):
-
-    # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
-    # add this is done only if calendar include 29Feb 
-    thresh_climYear = thresh_climYear.where(thresh_climYear.doy!=60, feb29(thresh_climYear))
-    seas_climYear = seas_climYear.where(seas_climYear.doy!=60, feb29(seas_climYear))
-    thresh_climYear = thresh_climYear.chunk({'doy': -1})
-    seas_climYear = seas_climYear.chunk({'doy': -1})
-    # If the length of year is < 365/366 (e.g. a 360 day year from a Climate Model)
-    if smoothPercentile:
-        if Ly:
-            valid = ~np.isnan(thresh_climYear)
-            thresh_climYear.where(~valid, runavg(thresh_climYear, smoothPercentileWidth))
-            seas_climYear.where(~valid, runavg(seas_climYear, smoothPercentileWidth))
-        # >= 365-day year
-        else:
-            thresh_climYear = runavg(thresh_climYear, smoothPercentileWidth)
-            seas_climYear = runavg(seas_climYear, smoothPercentileWidth)
-
-  # fix name of arrays
-    #thresh_climYear.name = 'threshold'
-    #seas_climYear.name = 'seasonal'
-    # Save vector indicating which points in temp are missing values
-    #missing = np.isnan(ts)
-    # Set all remaining missing temp values equal to the climatology
-    #seas_climYear = xr.where(missing, ts, seas_climYear)
-
-    # Save in dataset
-    #ds = xr.Dataset() 
-    #ds['thresh'] = thresh_climYear
-    #ds['seas'] = seas_climYear
-    #return ds
-    return thresh_climYear, seas_climYear 
-
-@dask.delayed(nout=1)
 def smooth_clim(clim, smoothPercentileWidth, Ly):
 
     # If the length of year is < 365/366 (e.g. a 360 day year from a Climate Model)

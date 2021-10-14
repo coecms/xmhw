@@ -57,11 +57,6 @@ def test_window_roll(oisst_ts, tstack):
     nptest.assert_almost_equal(array.values, tstack, decimal=5)
 
 
-def test_dask_percentile():
-#(array, axis, q):
-    assert True
-
-
 def test_join_gaps(filter_data):
     bthresh, idxarr, st, end, evs, st2, end2, evs2 = filter_data 
     # testing with maxGap=2 should return identical dataset

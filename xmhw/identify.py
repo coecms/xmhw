@@ -95,6 +95,7 @@ def feb29(ts, dim='doy'):
     #return (ts.where(ts.doy.isin([59,61]),drop=True).mean(dim=dim, skipna=True).values)
 
 
+@dask.delayed(nout=1)
 def runavg(ts, w):
     """Performs a running average of an input time series using uniform window
     of width w. This function assumes that the input time series is periodic.
@@ -123,16 +124,30 @@ def window_roll(ts, w, tdim):
     return troll.dropna(dim='z')
 
 
-def dask_percentile(array, axis, q):
-    """ Use dask to calculate percentile
+@dask.delayed(nout=1)
+def calculate_thresh(twindow, pctile, skipna):
+    """ Calculate threshold for one cell grid at the time
     """
-    array = array.rechunk({axis: -1})
-    return array.map_blocks(
-        np.nanpercentile,
-        axis=axis,
-        q=q,
-        dtype=array.dtype,
-        drop_axis=axis)
+    thresh_climYear = (twindow
+                       .groupby('doy')
+                       .quantile(pctile/100., dim='z', skipna=skipna))
+    # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
+    thresh_climYear = thresh_climYear.where(thresh_climYear.doy!=60, feb29(thresh_climYear))
+    thresh_climYear = thresh_climYear.chunk({'doy': -1})
+    return thresh_climYear
+
+
+@dask.delayed(nout=1)
+def calculate_seas(twindow, skipna):
+    """ Calculate mean climatology for one cell grid at the time
+    """
+    seas_climYear = (twindow
+                       .groupby('doy')
+                       .mean(dim='z', skipna=skipna))
+    # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
+    seas_climYear = seas_climYear.where(seas_climYear.doy!=60, feb29(seas_climYear))
+    seas_climYear = seas_climYear.chunk({'doy': -1})
+    return seas_climYear
 
 
 def join_gaps(st, end, events, maxGap):
