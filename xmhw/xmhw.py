@@ -360,7 +360,7 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # so data can be split by chunks
     ds = xr.Dataset({'ts': ts, 'seas': seas, 'thresh': thresh, 'bthresh': bthresh})
     ds = ds.reset_coords(drop=True)
-    ds = ds.chunk(chunks={'time': -1, 'cell': 1})
+    ds = ds.chunk(chunks={'time': -1})
     # Build a pandas series with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
     idxarr = pd.Series(data=np.arange(len(ds.time)), index=ds.time.values)

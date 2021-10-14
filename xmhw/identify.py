@@ -175,7 +175,7 @@ def join_gaps(st, end, events, maxGap):
     return pd.concat([st.rename('start'), end.rename('end'), events], axis=1) 
 
 
-@dask.delayed(nout=1)
+@dask.delayed(nout=2)
 def define_events(ds, idxarr,  minDuration, joinAcrossGaps, maxGap, intermediate):
     """Find all MHW events of duration >= minDuration
        if joinAcrossGaps is True than joins any event that is separated by a number of days <= maxGap
@@ -215,7 +215,8 @@ def mhw_filter(bthresh, idxarr, minDuration=5, joinGaps=True, maxGap=2):
     # shifted = [nan,0,0,0,1,1,1,1,-5,0,0,...]
     shifted = (events_map - events_map.shift(+1)).shift(-1)
 
-    shifted.iloc[-1] = -events_map.iloc[-1]
+    #shifted.iloc[-1] = -events_map.iloc[-1]
+    shifted = shifted.where(~np.isnan(shifted), -events_map)
     # select only cells where shifted is less equal to the -minDuration,
     duration = events_map.where(shifted <= -minDuration)
     # from idxarr select where mhw duration, this will the index of last day of mhw  
