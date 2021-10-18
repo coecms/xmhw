@@ -42,12 +42,12 @@ def test_feb29(oisst_ts):
 
 def test_runavg():
     a = xr.DataArray([1,2,2,4,3,2], dims=['doy'], coords=[np.array([1,2,3,4,5,6])])
-    b = runavg(a, 3)
+    b = runavg(a, 3).compute()
     nptest.assert_almost_equal(b.values, np.array([1.66667, 1.66667, 2.66667, 3., 3., 2.]), decimal=5)
-    c = runavg(a, 5)
+    c = runavg(a, 5).compute()
     nptest.assert_almost_equal(c.values, np.array([2. , 2.2, 2.4, 2.6, 2.4, 2.4]), decimal=5)
     with pytest.raises(XmhwException):
-        runavg(a, 2)
+        runavg(a, 2).compute()
 
 
 def test_window_roll(oisst_ts, tstack):

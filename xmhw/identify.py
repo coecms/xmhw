@@ -165,15 +165,16 @@ def join_gaps(st, end, events, maxGap):
     if len(s) > 1:
         pairs = set(zip(s.values,e.values))
     
-        eshift = e.shift(1)#.load()
+        eshift = e.shift(1)
         # by setting first value to -(maxGap+1) then gaps[0] will always be True
         # in this way we avoid a comparison with Nan and retain first start
-        eshift.iloc[0] = -(maxGap + 1)
+        #eshift = eshift.where(~np.isnan(eshift), -(maxGap + 1))
+        eshift = eshift.fillna(value=-(maxGap+1))
         gaps = ((s - eshift) > maxGap + 1)
         
     # shift back gaps series
         gaps_shifted = gaps.shift(-1)
-        gaps_shifted.iloc[-1] = True
+        gaps_shifted = gaps_shifted.fillna(value=True)
     # use "gaps" to select start indexes to keep
         s = s.where(gaps).dropna()
     # use "gaps_shifted" to select end indexes and duration to keep
@@ -208,7 +209,7 @@ def define_events(ds, idxarr,  minDuration, joinAcrossGaps, maxGap, intermediate
     mhw = xr.Dataset.from_dataframe(dfmhw, sparse=False)
     mhw_inter = None
     if intermediate:
-        df.drop(columns=['cell', 'time', 'start', 'end', 'anom_plus', 'anom_minus'], inplace=True)
+        df = df.drop(columns=['cell', 'time', 'start', 'end', 'anom_plus', 'anom_minus'])
         mhw_inter = xr.Dataset.from_dataframe(df, sparse=False)
     return mhw, mhw_inter 
 

@@ -244,6 +244,7 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # Land cells are removed
     # new dimensions are (time, cell)
     ts = land_check(temp, removeNans=anynans)
+    del temp
     th = land_check(th, tdim='doy', removeNans=anynans)
     se = land_check(se, tdim='doy', removeNans=anynans)
     # assign doy 
@@ -251,6 +252,7 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     # reindex climatologies along time axis
     thresh = th.sel(doy=ts.doy)
     seas = se.sel(doy=ts.doy)
+    del th, se
 
     # Linearly interpolate to replace all consecutive missing blocks of length <= maxPadLength
     if maxPadLength:
