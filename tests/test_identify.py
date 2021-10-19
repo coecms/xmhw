@@ -125,16 +125,20 @@ def test_land_check(oisst_ts, clim_oisst, landgrid):
 
 def test_define_events(define_data, mhw_data, inter_data):
     # test define events return two datasets if intermediate is True
-    ds, idxarr = define_data
+    ts, th, se, idxarr = define_data
     mhwds = mhw_data
     interds = inter_data
-    res = define_events(ds.isel(cell=0), idxarr, 5, True, 2, True)
+    res = define_events(ts.isel(cell=0), th.isel(cell=0), se.isel(cell=0),
+            idxarr, 5, True, 2, True)
     results = res.compute()
+    print('from funct', results[1])
+    print('interds', interds)
     xrtest.assert_allclose(results[0], mhwds)
     xrtest.assert_allclose(results[1], interds)
 
     # test define events return one dataset only if intemediate is False, as default
-    res = define_events(ds.isel(cell=0), idxarr, 5, True, 2, False)
+    res = define_events(ts.isel(cell=0), th.isel(cell=0), se.isel(cell=0),
+            idxarr, 5, True, 2, False)
     results = res.compute()
     xrtest.assert_allclose(results[0], mhwds)
     assert results[1] is None

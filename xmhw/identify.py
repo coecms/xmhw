@@ -192,25 +192,39 @@ def join_gaps(st, end, events, maxGap):
 
 
 @dask.delayed(nout=2)
-def define_events(ds, idxarr,  minDuration, joinAcrossGaps, maxGap, intermediate):
+#def define_events(ds, idxarr,  minDuration, joinAcrossGaps, maxGap, intermediate):
+def define_events(ts, th, se, idxarr,  minDuration, joinAcrossGaps, maxGap, intermediate):
     """Find all MHW events of duration >= minDuration
        if joinAcrossGaps is True than joins any event that is separated by a number of days <= maxGap
     """
+    # reindex thresh and seas along time index
+    thresh = th.sel(doy=ts.doy)
+    seas = se.sel(doy=ts.doy)
+
+    # Find MHWs as exceedances above the threshold
+    # Time series of "True" when threshold is exceeded, "False" otherwise
+    bthresh = ts > thresh
+    ds = xr.Dataset({'ts': ts, 'seas': seas, 'thresh': thresh, 'bthresh': bthresh})
+
     # Convert xarray dataset to pandas dataframe, as groupby operation are faster in pandas
     df = ds.to_dataframe()
+    del ds
     # detect events 
     dfev = mhw_filter(df.bthresh, idxarr, minDuration, joinAcrossGaps, maxGap)
     # Prepare dataframe to get features before groupby operation
     df = mhw_df(pd.concat([df,dfev], axis=1))
+    del dfev
     # Calculate mhw properties, for each event using groupby 
     dfmhw = mhw_features(df, len(idxarr)-1)
 
     # convert back to xarray dataset and reindex (?) so all cells have same event axis
     mhw = xr.Dataset.from_dataframe(dfmhw, sparse=False)
+    del dfmhw
     mhw_inter = None
     if intermediate:
-        df = df.drop(columns=['cell', 'time', 'start', 'end', 'anom_plus', 'anom_minus'])
+        df = df.drop(columns=['doy', 'cell', 'time', 'start', 'end', 'anom_plus', 'anom_minus'])
         mhw_inter = xr.Dataset.from_dataframe(df, sparse=False)
+    del df
     return mhw, mhw_inter 
 
 

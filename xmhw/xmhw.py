@@ -249,46 +249,30 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     se = land_check(se, tdim='doy', removeNans=anynans)
     # assign doy 
     ts = add_doy(ts)
-    # reindex climatologies along time axis
-    thresh = th.sel(doy=ts.doy)
-    seas = se.sel(doy=ts.doy)
-    del th, se
 
     # Linearly interpolate to replace all consecutive missing blocks of length <= maxPadLength
     if maxPadLength:
-        ts = ts.intepolate_na(dim=tdim, max_gap=maxPadLength)
+        ts = ts.interpolate_na(dim=tdim, max_gap=maxPadLength)
     # Flip temp time series if detecting cold spells
     if coldSpells:
         ts = -1.*ts
 
-    # Find MHWs as exceedances above the threshold
-    #
-
-    # Time series of "True" when threshold is exceeded, "False" otherwise
-    bthresh = ts > thresh
-    bthresh.name = 'bthresh'
-    # join timeseries arrays in dataset to pass to map_blocks
-    # so data can be split by chunks
-    ds = xr.Dataset({'ts': ts, 'seas': seas, 'thresh': thresh, 'bthresh': bthresh})
-    ds = ds.reset_coords(drop=True)
-    ds = ds.chunk(chunks={'time': -1})
     # Build a pandas series with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
-    idxarr = pd.Series(data=np.arange(len(ds.time)), index=ds.time.values)
+    idxarr = pd.Series(data=np.arange(len(ts.time)), index=ts.time.values)
     mhwls = []
-    for c in ds.cell:
-        mhwls.append(  define_events(ds.sel(cell=c), idxarr,
+    for c in ts.cell:
+        mhwls.append(  define_events(ts.sel(cell=c), th.sel(cell=c), se.sel(cell=c), idxarr,
                      minDuration, joinAcrossGaps, maxGap, intermediate))
     results = dask.compute(mhwls)
     mhw_results = [r[0] for r in results[0]]
-    mhw = xr.concat(mhw_results, dim=ds.cell)
+    mhw = xr.concat(mhw_results, dim=ts.cell)
     mhw = mhw.unstack('cell')
     if intermediate:
         inter_results = [r[1] for r in results[0]]
-        mhw_inter = xr.concat(inter_results, dim=ds.cell).unstack('cell')
+        mhw_inter = xr.concat(inter_results, dim=ts.cell).unstack('cell')
         mhw_inter = mhw_inter.rename({'index': 'time'})
         mhw_inter = mhw_inter.squeeze(drop=True)
-    #del mhw_results, inter_results 
     # if point dimension was added in land_check remove
     mhw = mhw.squeeze(drop=True)
 
