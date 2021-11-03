@@ -192,7 +192,6 @@ def join_gaps(st, end, events, maxGap):
 
 
 @dask.delayed(nout=2)
-#def define_events(ds, idxarr,  minDuration, joinAcrossGaps, maxGap, intermediate):
 def define_events(ts, th, se, idxarr,  minDuration, joinAcrossGaps, maxGap, intermediate):
     """Find all MHW events of duration >= minDuration
        if joinAcrossGaps is True than joins any event that is separated by a number of days <= maxGap

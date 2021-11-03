@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env
 # coding: utf-8
 # Copyright 2020 ARC Centre of Excellence for Climate Extremes
 # author: Paola Petrelli <paola.petrelli@utas.edu.au>
@@ -32,47 +32,44 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windo
                    smoothPercentileWidth=31, maxPadLength=None, coldSpells=False, Ly=False, anynans=False, skipna=False):
     """Calculate threshold and seasonal climatology (varying with day-of-year)
 
-    Inputs:
-
-      temp    Temperature array
-
-    Outputs:
-        'thresh'               Seasonally varying threshold (e.g., 90th percentile)
-        'seas'                 Climatological seasonal cycle
-        'missing'              A vector of TRUE/FALSE indicating which elements in 
-                               temp were missing values for the MHWs detection
-
-    Options:
-
-      tdim                   String: time dimension name, default='time'
-      climatologyPeriod      List of integers: period over which climatology is calculated, specified
-                             as list of start and end years. Default is to calculate
-                             over the full range of years in the supplied time series.
-                             Alternate periods suppled as a list e.g. [1983,2012].
-      pctile                 Integer: threshold percentile (%) for detection of extreme values
-                             (DEFAULT = 90)
-      windowHalfWidth        Integer: width of window (one sided) about day-of-year used for
-                             the pooling of values and calculation of threshold percentile
-                             (DEFAULT = 5 [days])
-      smoothPercentile       Boolean: switch indicating whether to smooth the threshold
-                             percentile timeseries with a moving average (DEFAULT = True)
-      smoothPercentileWidth  Integer: width of moving average window for smoothing threshold
-                             (DEFAULT = 31 [days], should be odd number)
-      maxPadLength           Integer: specifies the maximum length [days] over which to interpolate
-                             (pad) missing data (specified as nans) in input temp time series.
-                             i.e., any consecutive blocks of NaNs with length greater
-                             than maxPadLength will be left as NaN.
-                             (DEFAULT = None, interpolates over all missing values).
-      coldSpells             Boolean: specifies if the code should detect cold events instead of
-                             heat events. (DEFAULT = False)
-      Ly                     Boolean: specifies if the length of the year is < 365/366 days (e.g. a 
+    Parameters
+    ----------
+    temp    Temperature array
+    tdim: str
+        Name of time dimension. (DEFAULT='time')
+    climatologyPeriod: list(int)
+        Period over which climatology is calculated, specified as list of start and end years. Optional,
+        default is to use the full time series.
+    pctile: int 
+        Threshold percentile (%) for detection of extreme values (dafault 90)
+    windowHalfWidth: int
+        Width of window (one sided) about day-of-year used for the pooling of values and calculation of
+        threshold percentile (default 5)
+    smoothPercentile: bool 
+        If True smooth the threshold percentile timeseries with a moving average (default True)
+    smoothPercentileWidth: int
+        Width of moving average window for smoothing threshold in days, has to be odd number (dafault 31)
+    maxPadLength: int
+        Specifies the maximum length in days over which to interpolate NaNs in input temp time series.
+        i.e., any consecutive blocks of NaNs with length greater than maxPadLength will be left as NaN.
+        If None it does not interpolate (default None).
+    coldSpells: bool
+        Specifies if the code should detect cold events instead of heat events (default False)
+    Ly                     Boolean: specifies if the length of the year is < 365/366 days (e.g. a 
                              360 day year from a climate model). This affects the calculation
                              of the climatology. (DEFAULT = False)
-      anynans                Boolean: define in land_check which cells will be dropped, by default 
-                             only ones with all nans values, if anynas is True then all cells with 
-                             even 1 nans along time dimension will be dropped (DEFAULT=False)
-      skipna                 Boolean: determines if percentile and mean will use skipna=True or False,
-                             the second is default as it is faster. (DEFAULT = False)
+    anynans: bool
+        Define in land_check which cells will be dropped, if False only ones with all nans values, if True
+        then all cells with even 1 NaN along time dimension will be dropped (dafault False)
+    skipna: bool 
+        Determines if percentile and mean will use skipna=True or False, the second is default as it is faster.
+        (default False)
+
+    Returns
+    -------
+    clim : xarray Dataset
+        includes thresh seasonally varying threshold (e.g., 90th percentile)
+                 seas   climatological seasonal cycle
     """
 
     # check smooth percentile window width is odd
@@ -183,47 +180,40 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     """
 
     Applies the Hobday et al. (2016) marine heat wave definition to an input time
-    series of temp ('temp') along with a time vector ('t'). Outputs properties of
-    all detected marine heat waves.
+    series of temperature. Outputs properties of all detected marine heat waves.
 
-    Inputs:
-
-      temp    Temperature array [1D  xarray of length T]
-      clim    Climatology of SST. Each key (following list) is a seasonally-varying
-              time series [1D numpy array of length T] of a particular measure:
-
-        'th'               Seasonally varying threshold (e.g., 90th percentile)
-        'se'                 Climatological seasonal cycle
-        'missing'              A vector of TRUE/FALSE indicating which elements in 
-                               temp were missing values for the MHWs detection
-
-      
+    Parameters
+    ----------
+    temp: xarray DataArray
+        Temperature array
+    th: xarray DataArray
+        Seasonally varying threshold (e.g., 90th percentile)
+    se: xarray DataArray
+        Climatological seasonal cycle
+    minDuration: int
+        Minimum duration in days for acceptance detected MHWs (default 5)
+    joinAcrossGaps: bool 
+       Switch indicating whether to join MHWs separated by a short gap (default True)
+    maxGap: int
+       Maximum length of gap in days allowed for the joining of MHWs (default 2)
+    maxPadLength: int
+        Specifies the maximum length in days over which to interpolate NaNs in input temp time series.
+        i.e., any consecutive blocks of NaNs with length greater than maxPadLength will be left as NaN.
+        If None it does not interpolate (default None).
+    coldSpells: bool
+        Specifies if the code should detect cold events instead of heat events (default False)
+    tdim: str
+        Name of time dimension. (DEFAULT='time')
+    intermediate: bool
+        If True also output dataset with sst, climatologies and detected events along time axis (default False)
     
-    Outputs:
+    Returns
+    -------
 
-      mhw     Detected marine heat waves (MHWs). Each key (following list) is a
-              list of length N where N is the number of detected MHWs:
-              ....
-      ds      stacked dataset with sst and climatologies along time axis - Optional only if intermediate is True
-
-
-    Options:
-
-      minDuration            Integer: minimum duration for acceptance detected MHWs
-                             (DEFAULT = 5 [days])
-      joinAcrossGaps         Boolean: switch indicating whether to join MHWs      
-                             which occur before/after a short gap (DEFAULT = True)
-      maxGap                 Maximum length of gap allowed for the joining of MHWs
-                             (DEFAULT = 2 [days])
-      maxPadLength           Integer: specifies the maximum length [days] over which to interpolate
-                             (pad) missing data (specified as nans) in input temp time series.
-                             i.e., any consecutive blocks of NaNs with length greater
-                             than maxPadLength will be left as NaN.
-                             (DEFAULT = None, interpolates over all missing values, boolean).
-      coldSpells             Boolean: specifies if the code should detect cold events instead of
-                             heat events. (DEFAULT = False)
-      tdim                   String: name of time dimension. (DEFAULT='time')
-      intermediate           Boolean: if True also output stacked dataset with sst and climatologies along time axis. (default: False)
+    mhw: xarray Dataset
+        Detected marine heat waves (MHWs). Has new 'events' dimension
+    intermediate: xarray Dataset
+        dataset with sst and climatologies along time axis - Optional only if intermediate is True
     """
   
    
