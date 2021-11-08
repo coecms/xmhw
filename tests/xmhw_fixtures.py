@@ -75,7 +75,7 @@ def oisst_doy():
 
 @pytest.fixture
 def tstack():
-    return np.array([ np.nan, 16.99, 17.39, 16.99, 17.39, 17.3 , 17.39, 17.3 , np.nan])
+    return np.array([ 16.99, 17.39, 16.99, 17.39, 17.3 , 17.39, 17.3 ])
 
 
 @pytest.fixture
@@ -128,20 +128,24 @@ def rates_data():
 def define_data():
     # create 1-D dataset to pass to define_events
     time = pd.date_range('2001-01-01', periods=9)
-    ds = xr.Dataset()
-    ds['ts'] = xr.DataArray(data=[15.6, 17.3, 18.2, 19.5, 19.4, 19.6, 18.1, 17.0, 15.2],
-                  dims=['time'], coords={'time': time})
-    ds['seas'] = xr.DataArray(data=[15.8, 16.0, 16.2, 16.5, 16.6, 16.4, 16.6, 16.7, 16.4],
-                    dims=['time'], coords={'time': time})
-    ds['thresh'] = xr.DataArray([16.0, 16.7, 17.6, 17.9, 18.1, 18.2, 17.3, 17.2, 17.0],
+    doy = xr.DataArray(data=[1, 2, 3, 4, 5, 6, 7, 8, 9],
                             dims=['time'], coords={'time': time})
-    ds['bthresh'] = ds['ts'] > ds['thresh']
-    ds = ds.expand_dims(['lat','lon'])
-    ds = ds.stack(cell=(['lat','lon']))
+    ts = xr.DataArray(data=[15.6, 17.3, 18.2, 19.5, 19.4, 19.6, 18.1, 17.0, 15.2],
+            dims=['time'], coords={'time': time, 'doy': doy})
+    se = xr.DataArray(data=[15.8, 16.0, 16.2, 16.5, 16.6, 16.4, 16.6, 16.7, 16.4],
+                  dims=['doy'], coords={'doy': ts['doy'].values})
+    th = xr.DataArray([16.0, 16.7, 17.6, 17.9, 18.1, 18.2, 17.3, 17.2, 17.0],
+                  dims=['doy'], coords={'doy': ts['doy'].values})
+    ts = ts.expand_dims(['lat','lon'])
+    ts = ts.stack(cell=(['lat','lon']))
+    se = se.expand_dims(['lat','lon'])
+    th = th.expand_dims(['lat','lon'])
+    se = se.stack(cell=(['lat','lon']))
+    th = th.stack(cell=(['lat','lon']))
     # Build a pandas series with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
-    idxarr = pd.Series(data=np.arange(9), index=ds.time.values)
-    return (ds, idxarr)
+    idxarr = pd.Series(data=np.arange(9), index=ts.time.values)
+    return (ts, th, se, idxarr)
 
 
 @pytest.fixture
@@ -192,6 +196,7 @@ def inter_data():
     vars_dict = {'ts': [15.6, 17.3, 18.2, 19.5, 19.4, 19.6, 18.1, 17.0, 15.2],
         'seas': [np.nan, 16.0, 16.2, 16.5, 16.6, 16.4, 16.6, np.nan, np.nan],
         'thresh': [np.nan, 16.7, 17.6, 17.9, 18.1, 18.2, 17.3, np.nan, np.nan],
+        'bthresh': [False, True, True, True, True, True, True, False, False],
         'events': [np.nan, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, np.nan, np.nan],
         'relSeas': [np.nan, 1.3, 2.0, 3.0, 2.79999, 3.2, 1.5, np.nan, np.nan],
         'relThresh': [np.nan, 0.6, 0.6, 1.6, 1.3, 1.4, 0.8, np.nan, np.nan],
@@ -221,4 +226,17 @@ def calendars():
     ndays_year = {'noleap': 365, 'all_leap': 366, 'day_365' : 365, 'day_366': 366, 'day_360': 360,
              'gregorian': 365.25, 'standard': 365.25, 'julian': 365.25, 'proleptic': 365.25}
     return noleap, all_leap, day_365, day_366, gregorian, standard, julian, proleptic, ndays_year 
+
+
+@pytest.fixture
+def rank_data():
+    int_max = xr.DataArray(
+        [2.3, 1.2, 3.5, 2.4, 2.3],
+        dims=["events"],
+        coords={"events": [8, 18, 29, 50, 89]})
+    rank = xr.DataArray(
+        [4, 5, 1, 2, 3],
+        dims=["events"],
+        coords={"events": [8, 18, 29, 50, 89]})
+    return int_max, rank
 
