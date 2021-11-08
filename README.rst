@@ -1,4 +1,5 @@
 =============================
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5652368.svg)](https://doi.org/10.5281/zenodo.5652368)
  `xmhw <https://xmhw.readthedocs.io/en/stable>`_
 =============================
 
