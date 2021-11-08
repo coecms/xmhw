@@ -103,10 +103,10 @@ def test_land_check(oisst_ts, clim_oisst, landgrid):
     newts = land_check(oisst_ts)
     assert newts.shape == (731, 12)
     # test timeseries with with only few nans in a lat/lon cell 
-    # both for removeNans=False (default) and removeNans=True
+    # both for anynans=False (default) and anynans=True
     fewnans = oisst_ts.copy()
     fewnans[245,1,2] = np.nan
-    newts = land_check(fewnans, removeNans=True)
+    newts = land_check(fewnans, anynans=True)
     assert newts.shape == (731, 11)
     newts = land_check(fewnans)
     assert newts.shape == (731, 12)
@@ -131,8 +131,6 @@ def test_define_events(define_data, mhw_data, inter_data):
     res = define_events(ts.isel(cell=0), th.isel(cell=0), se.isel(cell=0),
             idxarr, 5, True, 2, True)
     results = res.compute()
-    print('from funct', results[1])
-    print('interds', interds)
     xrtest.assert_allclose(results[0], mhwds)
     xrtest.assert_allclose(results[1], interds)
 
