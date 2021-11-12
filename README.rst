@@ -27,7 +27,7 @@ Install
 -------
 
 
-    git clone
+    git clone https://github.com/coecms/xmhw
     
     cd xmhw 
     
