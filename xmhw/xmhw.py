@@ -30,7 +30,7 @@ from .exception import XmhwException
 def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90,
               windowHalfWidth=5, smoothPercentile=True,
               smoothPercentileWidth=31, maxPadLength=None, coldSpells=False,
-              Ly=False, anynans=False, skipna=False):
+              tstep=False, anynans=False, skipna=False):
     """Calculate threshold and mean climatology (day-of-year).
 
     Parameters
@@ -61,10 +61,10 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90,
     coldSpells: bool, optional
         If True the code detects cold events instead of heat events
         (default is False)
-    Ly: bool, optional
-        If True the length of the year is < 365/366 days (e.g. a 360 day
-        year from a climate model). This affects the calculation
-        of the climatology (default is False)
+    tstep: bool, optional
+        If True the timeseries timestep is used as base for 'doy' unit 
+        To use with any but 365/366 days year daily files
+        (default is False)
     anynans: bool, optional
         Defines in land_check which cells will be dropped, if False
         only ones with all NaNs values, if True all cells with even
@@ -106,13 +106,14 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90,
     # check if the calendar attribute is present in time dimension
     # if not try to guess length of year
     year_days = get_calendar(ts[tdim])
-    if year_days == 365.25:
-        ts = add_doy(ts, tdim=tdim)
-    else:
-        XMHW.Exception("Module is not yet set to work with a calendar "
-            + "different from gregorian, standard, proleptic_gregorian."
-            + "NB We treat all these calendars in the same way in the "
-            + "assumption that the timeseries starts after 1582")
+    if year_days == 360.0:
+        tstep = True
+    ts = add_doy(ts, tdim=tdim, keep_tstep=tstep)
+    #else:
+    #    XMHW.Exception("Module is not yet set to work with a calendar "
+    #        + "different from gregorian, standard, proleptic_gregorian."
+    #        + "NB We treat all these calendars in the same way in the "
+    #        + "assumption that the timeseries starts after 1582")
 
     # Flip ts time series if detecting cold spells
     if coldSpells:
@@ -130,7 +131,7 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90,
     for c in ts.cell:
         climls.append( calc_clim(ts.sel(cell=c), tdim, pctile, 
                        windowHalfWidth, smoothPercentile,
-                       smoothPercentileWidth, Ly, skipna) )
+                       smoothPercentileWidth, tstep, skipna) )
     results =dask.compute(climls)
 
     # Concatenate results and save as dataset
@@ -165,7 +166,7 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90,
 
 
 def calc_clim(ts, tdim, pctile, windowHalfWidth, smoothPercentile,
-              smoothPercentileWidth, Ly, skipna):
+              smoothPercentileWidth, tstep, skipna):
     """Calculate climatologies.
 
     Parameters
@@ -185,10 +186,9 @@ def calc_clim(ts, tdim, pctile, windowHalfWidth, smoothPercentile,
     smoothPercentileWidth: int
         Width of moving average window for smoothing threshold in days,
         has to be odd number
-    Ly: bool
-        If True the length of the year is < 365/366 days (e.g. a 360 day
-        year from a climate model). This affects the calculation
-        of the climatology
+    tstep: bool
+        If True the timeseries timestep is used as base for 'doy' unit 
+        To use with any but 365/366 days year daily files
     skipna: bool
         If True percentile and mean function will use skipna=True.
         Using skipna option is much slower
@@ -206,46 +206,15 @@ def calc_clim(ts, tdim, pctile, windowHalfWidth, smoothPercentile,
     twindow = twindow.chunk({'z': -1})
     
     # Calculate threshold and seasonal climatology across years
-    thresh_climYear = calculate_thresh(twindow, pctile, skipna)
-    seas_climYear = calculate_seas(twindow, skipna) 
+    thresh_climYear = calculate_thresh(twindow, pctile, skipna, tstep)
+    seas_climYear = calculate_seas(twindow, skipna, tstep) 
 
     # If smooth option on smooth both climatologies
     if smoothPercentile:
-        thresh_climYear = smooth_clim(thresh_climYear, smoothPercentileWidth, Ly)
-        seas_climYear = smooth_clim(seas_climYear, smoothPercentileWidth, Ly)
+        thresh_climYear = runavg(thresh_climYear, smoothPercentileWidth)
+        seas_climYear = runavg(seas_climYear, smoothPercentileWidth)
 
     return thresh_climYear, seas_climYear
-
-
-def smooth_clim(clim, smoothPercentileWidth, Ly):
-    """Smooth climatology timeseries using a running average.
-
-    Parameters
-    ----------
-    clim: xarray DataArray
-        climatology timeseries to smooth
-    smoothPercentileWidth: int
-        Width of moving average window for smoothing threshold in days,
-        has to be odd number
-    Ly: bool
-        If True the length of the year is < 365/366 days (e.g. a 360 day
-        year from a climate model). This affects the calculation
-        of the climatology
-
-    Returns
-    -------
-    clim: xarray DataArray
-        smoothed climatology timeseries
-    """
-
-    # If the length of year is < 365/366 (e.g. a 360 day year from a 
-    # Climate Model)
-    if Ly:
-        valid = ~np.isnan(clim)
-        clim.where(~valid, runavg(clim, smoothPercentileWidth))
-    else:
-        clim = runavg(clim, smoothPercentileWidth)
-    return clim 
 
 
 def detect(temp, th, se, tdim='time', minDuration=5, joinGaps=True,
@@ -315,7 +284,7 @@ def detect(temp, th, se, tdim='time', minDuration=5, joinGaps=True,
     th = land_check(th, tdim='doy', anynans=anynans)
     se = land_check(se, tdim='doy', anynans=anynans)
     # assign doy 
-    ts = add_doy(ts)
+    ts = add_doy(ts, tdim=tdim, keep_tstep=tstep)
 
     # Linear interpolation of all consecutive missing blocks
     # of length <= maxPadLength

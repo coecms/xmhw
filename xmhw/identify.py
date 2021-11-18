@@ -25,8 +25,11 @@ from .exception import XmhwException
 from .features import mhw_df, mhw_features
 
 
-def add_doy(ts, tdim="time"):
+def add_doy(ts, tdim="time", keep_tstep=False):
     """Add coordinate 'doy' day of the year for a 366 days year.
+
+    If keep_tstep is True use instead original timestep as a 'doy" unit.
+    So for 360 days year doy step is days, for monthly 1 doy is a month.
 
     Parameters
     ----------
@@ -34,6 +37,8 @@ def add_doy(ts, tdim="time"):
         Timeseries array
     tdim: str, optional
         Name of time dimension (default='time')
+    keep_tstep: bool, optional
+        If True base 'doy' unit on original timestep (default=False)
 
     Returns
     -------
@@ -41,14 +46,32 @@ def add_doy(ts, tdim="time"):
         Timeseries array with extra 'doy' coordinate
     """
 
+    # If keeping the timestep as unit for doy:
+    # find out how many tsteps in 1 year, check all years are complete
+    # assign values from 1 to number of tsteps to new coordinate for 
+    # each year
+    # Else if using 366-days year:
     # get original dayofyear
     # create filters: from 1st of March onwards and non leap years
     # add extra day if not leap year and march or later
     t = ts[tdim]
-    doy_original = t.dt.dayofyear
-    march_or_later = t.dt.month >= 3
-    not_leap_year = ~t.dt.is_leap_year
-    doy = doy_original + (not_leap_year & march_or_later)
+    if keep_tstep is True:
+       years = np.unique(t.dt.year.values)
+       oneyear = t.where(t.dt.year==years[1]).dropna(dim=tdim)
+       if len(t)%len(oneyear) != 0.0:
+           raise XmhwException("To use original timestep as " +
+               "climatology base unit, timeseries has to have" +
+               " complete years")
+       nyears = int(len(t)/len(oneyear))
+       doy_values = np.array(range(1,len(oneyear)+1))
+       doys = np.stack([doy_values for _ in range(nyears)], axis=0)
+       doys = doys.flatten()
+       doy = xr.DataArray(data=doys, dims=(tdim), coords={'time': t})
+    else:
+        doy_original = t.dt.dayofyear
+        march_or_later = t.dt.month >= 3
+        not_leap_year = ~t.dt.is_leap_year
+        doy = doy_original + (not_leap_year & march_or_later)
     # rechunk and return new doy as coordinate of the "ts" input variable
     ts.coords['doy'] = doy.chunk({tdim: -1})
     return ts
@@ -174,7 +197,7 @@ def window_roll(ts, w, tdim):
 
 
 @dask.delayed(nout=1)
-def calculate_thresh(twindow, pctile, skipna):
+def calculate_thresh(twindow, pctile, skipna, tstep):
     """Calculate threshold for one cell grid at the time
 
     Parameters
@@ -198,14 +221,15 @@ def calculate_thresh(twindow, pctile, skipna):
                        .groupby('doy')
                        .quantile(pctile/100., dim='z', skipna=skipna))
     # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
-    thresh_climYear = thresh_climYear.where(thresh_climYear.doy!=60, 
+    if tstep is False:
+        thresh_climYear = thresh_climYear.where(thresh_climYear.doy!=60, 
                                             feb29(thresh_climYear))
     thresh_climYear = thresh_climYear.chunk({'doy': -1})
     return thresh_climYear
 
 
 @dask.delayed(nout=1)
-def calculate_seas(twindow, skipna):
+def calculate_seas(twindow, skipna, tstep):
     """ Calculate mean climatology for one cell grid at the time
 
     Parameters
@@ -226,7 +250,8 @@ def calculate_seas(twindow, skipna):
                        .groupby('doy')
                        .mean(dim='z', skipna=skipna))
     # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
-    seas_climYear = seas_climYear.where(seas_climYear.doy!=60,
+    if tstep is False:
+        seas_climYear = seas_climYear.where(seas_climYear.doy!=60,
                                         feb29(seas_climYear))
     seas_climYear = seas_climYear.chunk({'doy': -1})
     return seas_climYear
