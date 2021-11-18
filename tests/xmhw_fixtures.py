@@ -75,7 +75,7 @@ def oisst_doy():
 
 @pytest.fixture
 def tstack():
-    return np.array([ np.nan, 16.99, 17.39, 16.99, 17.39, 17.3 , 17.39, 17.3 , np.nan])
+    return np.array([ 16.99, 17.39, 16.99, 17.39, 17.3 , 17.39, 17.3 ])
 
 
 @pytest.fixture
@@ -128,20 +128,24 @@ def rates_data():
 def define_data():
     # create 1-D dataset to pass to define_events
     time = pd.date_range('2001-01-01', periods=9)
-    ds = xr.Dataset()
-    ds['ts'] = xr.DataArray(data=[15.6, 17.3, 18.2, 19.5, 19.4, 19.6, 18.1, 17.0, 15.2],
-                  dims=['time'], coords={'time': time})
-    ds['seas'] = xr.DataArray(data=[15.8, 16.0, 16.2, 16.5, 16.6, 16.4, 16.6, 16.7, 16.4],
-                    dims=['time'], coords={'time': time})
-    ds['thresh'] = xr.DataArray([16.0, 16.7, 17.6, 17.9, 18.1, 18.2, 17.3, 17.2, 17.0],
+    doy = xr.DataArray(data=[1, 2, 3, 4, 5, 6, 7, 8, 9],
                             dims=['time'], coords={'time': time})
-    ds['bthresh'] = ds['ts'] > ds['thresh']
-    ds = ds.expand_dims(['lat','lon'])
-    ds = ds.stack(cell=(['lat','lon']))
+    ts = xr.DataArray(data=[15.6, 17.3, 18.2, 19.5, 19.4, 19.6, 18.1, 17.0, 15.2],
+            dims=['time'], coords={'time': time, 'doy': doy})
+    se = xr.DataArray(data=[15.8, 16.0, 16.2, 16.5, 16.6, 16.4, 16.6, 16.7, 16.4],
+                  dims=['doy'], coords={'doy': ts['doy'].values})
+    th = xr.DataArray([16.0, 16.7, 17.6, 17.9, 18.1, 18.2, 17.3, 17.2, 17.0],
+                  dims=['doy'], coords={'doy': ts['doy'].values})
+    ts = ts.expand_dims(['lat','lon'])
+    ts = ts.stack(cell=(['lat','lon']))
+    se = se.expand_dims(['lat','lon'])
+    th = th.expand_dims(['lat','lon'])
+    se = se.stack(cell=(['lat','lon']))
+    th = th.stack(cell=(['lat','lon']))
     # Build a pandas series with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
-    idxarr = pd.Series(data=np.arange(9), index=ds.time.values)
-    return (ds, idxarr)
+    idxarr = pd.Series(data=np.arange(9), index=ts.time.values)
+    return (ts, th, se, idxarr)
 
 
 @pytest.fixture

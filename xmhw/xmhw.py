@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env
 # coding: utf-8
 # Copyright 2020 ARC Centre of Excellence for Climate Extremes
 # author: Paola Petrelli <paola.petrelli@utas.edu.au>
@@ -20,297 +20,334 @@ import xarray as xr
 import numpy as np
 import pandas as pd
 import dask
-import sys
-import time
-from .identify import (join_gaps, define_events, runavg, dask_percentile, window_roll,
-                      land_check, feb29, add_doy, get_calendar, annotate_ds) 
+from .identify import (land_check, add_doy, get_calendar, define_events,
+                       runavg, window_roll, calculate_thresh,
+                       calculate_seas, annotate_ds)
 from .features import flip_cold
 from .exception import XmhwException
 
 
-def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5, smoothPercentile=True, 
-                   smoothPercentileWidth=31, maxPadLength=None, coldSpells=False, Ly=False, anynans=False, skipna=False):
-    """Calculate threshold and seasonal climatology (varying with day-of-year)
+def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90,
+              windowHalfWidth=5, smoothPercentile=True,
+              smoothPercentileWidth=31, maxPadLength=None, coldSpells=False,
+              Ly=False, anynans=False, skipna=False):
+    """Calculate threshold and mean climatology (day-of-year).
 
-    Inputs:
+    Parameters
+    ----------
+    temp: xarray DataArray
+        Temperature timeseries array
+    tdim: str, optional
+        Name of time dimension (default 'time')
+    climatologyPeriod: list(int), optional
+        Period over which climatology is calculated, specified as list
+        of start and end years. Default is to use the full time series.
+    pctile: int, optional 
+        Threshold percentile used to detect events (default=90)
+    windowHalfWidth: int, optional
+        Half width of window about day-of-year used for the pooling of
+        values and calculation of threshold percentile (default=5)
+    smoothPercentile: bool, optional 
+        If True smooth the threshold percentile timeseries with a
+        moving average (default is True)
+    smoothPercentileWidth: int, optional
+        Width of moving average window for smoothing threshold in days,
+        has to be odd number (default=31)
+    maxPadLength: int, optional
+        Specifies the maximum length (days) over which to interpolate
+        NaNs in input temp time series. i.e., any consecutive blocks of
+        NaNs with length greater than maxPadLength will be left as
+        NaN. If None it does not interpolate (default is None).
+    coldSpells: bool, optional
+        If True the code detects cold events instead of heat events
+        (default is False)
+    Ly: bool, optional
+        If True the length of the year is < 365/366 days (e.g. a 360 day
+        year from a climate model). This affects the calculation
+        of the climatology (default is False)
+    anynans: bool, optional
+        Defines in land_check which cells will be dropped, if False
+        only ones with all NaNs values, if True all cells with even
+        1 NaN along time dimension will be dropped (default is False)
+    skipna: bool, optional 
+        If True percentile and mean function will use skipna=True.
+        Using skipna option is much slower (default is False)
 
-      temp    Temperature array
-
-    Outputs:
-        'thresh'               Seasonally varying threshold (e.g., 90th percentile)
-        'seas'                 Climatological seasonal cycle
-        'missing'              A vector of TRUE/FALSE indicating which elements in 
-                               temp were missing values for the MHWs detection
-
-    Options:
-
-      tdim                   String: time dimension name, default='time'
-      climatologyPeriod      List of integers: period over which climatology is calculated, specified
-                             as list of start and end years. Default is to calculate
-                             over the full range of years in the supplied time series.
-                             Alternate periods suppled as a list e.g. [1983,2012].
-      pctile                 Integer: threshold percentile (%) for detection of extreme values
-                             (DEFAULT = 90)
-      windowHalfWidth        Integer: width of window (one sided) about day-of-year used for
-                             the pooling of values and calculation of threshold percentile
-                             (DEFAULT = 5 [days])
-      smoothPercentile       Boolean: switch indicating whether to smooth the threshold
-                             percentile timeseries with a moving average (DEFAULT = True)
-      smoothPercentileWidth  Integer: width of moving average window for smoothing threshold
-                             (DEFAULT = 31 [days], should be odd number)
-      maxPadLength           Integer: specifies the maximum length [days] over which to interpolate
-                             (pad) missing data (specified as nans) in input temp time series.
-                             i.e., any consecutive blocks of NaNs with length greater
-                             than maxPadLength will be left as NaN.
-                             (DEFAULT = None, interpolates over all missing values).
-      coldSpells             Boolean: specifies if the code should detect cold events instead of
-                             heat events. (DEFAULT = False)
-      Ly                     Boolean: specifies if the length of the year is < 365/366 days (e.g. a 
-                             360 day year from a climate model). This affects the calculation
-                             of the climatology. (DEFAULT = False)
-      anynans                Boolean: define in land_check which cells will be dropped, by default 
-                             only ones with all nans values, if anynas is True then all cells with 
-                             even 1 nans along time dimension will be dropped (DEFAULT=False)
-      skipna                 Boolean: determines if percentile and mean will use skipna=True or False,
-                             the second is default as it is faster. (DEFAULT = False)
+    Returns
+    -------
+    clim : xarray Dataset
+        includes thresh climatological threshold 
+                 seas   climatological mean
     """
 
-    # check smooth percentile window width is odd
+    # Check smooth percentile window width is odd
+    # and that time dimension (tdim) is present
     if smoothPercentileWidth%2 == 0:
         raise XmhwException("smoothPercentileWidth should be odd")
-    # check that time dimension (tdim) is present
     if tdim not in temp.dims: 
-        raise XmhwException(f"{tdim} dimension not present, default is 'time' or pass as tdim='time_dimension_name'")
+        raise XmhwException(f"{tdim} dimension not present, default" +
+                    "is 'time' or pass as tdim='time_dimension_name'")
 
     # Set climatology period, if unset use full range of available data
     if all(climatologyPeriod):
-        tslice = {tdim: slice(f'{climatologyPeriod[0]}-01-01', f'{climatologyPeriod[1]}-12-31')}
+        tslice = {tdim: slice(f'{climatologyPeriod[0]}-01-01',
+                              f'{climatologyPeriod[1]}-12-31')}
         temp = temp.sel(**tslice)
-    # save original attributes in a dictionary to be assigned to final datset
+    # Save original attributes in dictionary to assign to final dataset
     ds_attrs = {}
     ds_attrs['ts'] = temp.attrs
-    #ds_attrs[tdim+'encoding'] = temp.encoding
+    # ds_attrs[tdim+'encoding'] = temp.encoding
     for c in temp.dims:
         ds_attrs[c] = temp[c].attrs
-    # return an array stacked on all dimensions excluded time
-    # Land cells are removed
-    # new dimensions are (time,cell)
-    ts = land_check(temp, tdim=tdim, removeNans=anynans)
+    # Returns an array stacked on all dimensions excluded time
+    # Land cells are removed and new dimensions are (time,cell)
+    ts = land_check(temp, tdim=tdim, anynans=anynans)
 
-    # check if the calendar attribute is present in series time dimension
+    # check if the calendar attribute is present in time dimension
     # if not try to guess length of year
     year_days = get_calendar(ts[tdim])
     if year_days == 365.25:
         ts = add_doy(ts, tdim=tdim)
     else:
-        XMHW.Exception(f"Module is not yet set to work with a calendar different from gregorian, standard, proleptic_gregorian. NB We treat all these calendars in the same way in the assumption that the timeseries starts after 1582")
+        XMHW.Exception("Module is not yet set to work with a calendar "
+            + "different from gregorian, standard, proleptic_gregorian."
+            + "NB We treat all these calendars in the same way in the "
+            + "assumption that the timeseries starts after 1582")
 
     # Flip ts time series if detecting cold spells
     if coldSpells:
         ts = -1.*ts
 
-    # Pad missing values for all consecutive missing blocks of length <= maxPadLength
-    # NB this is not happening by default and there could be issues if nan values are present in the timeseries
+    # Linear interpolation of all consecutive missing blocks
+    # of length <= maxPadLength
+    # NB by default maxPadLength is None and there is no interpolation
     if maxPadLength:
         ts = ts.interpolate_na(dim=tdim, max_gap=maxPadLength)
 
-    # Apply window_roll to each cell.
-    # Window_roll first finds for each day of the year all the ts values that falls in
-    # a window +/-windowHalfWidth, then concatenates them in a new timeseries
+    # Loop over each cell to calculate climatologies, main functions
+    # are delayed, so loop is automatically run in parallel
     climls = []
     for c in ts.cell:
-        climls.append( calc_thresh(ts.sel(cell=c), windowHalfWidth,
-                       pctile, smoothPercentile, smoothPercentileWidth,
-                       Ly, tdim, skipna=skipna) )
+        climls.append( calc_clim(ts.sel(cell=c), tdim, pctile, 
+                       windowHalfWidth, smoothPercentile,
+                       smoothPercentileWidth, Ly, skipna) )
     results =dask.compute(climls)
-    #clim_results = [r[0] for r in results[0]]
-    ds = xr.concat(results[0], dim=ts.cell)
+
+    # Concatenate results and save as dataset
+    ds = xr.Dataset() 
+    thresh_results = [r[0] for r in results[0]]
+    ds['thresh'] = xr.concat(thresh_results, dim=ts.cell)
+    ds.thresh.name = 'threshold'
+    seas_results = [r[1] for r in results[0]]
+    ds['seas'] = xr.concat(seas_results, dim=ts.cell)
+    ds.seas.name = 'seasonal'
     ds = ds.unstack('cell')
+
+    # add previously saved attributes to ds
     ds = annotate_ds(ds, ds_attrs, 'clim')
     # add all parameters used to global attributes 
+    dum = [ts[0,0][tdim].dt.year.values, ts[-1,0][tdim].dt.year.values] 
     params = f"""Threshold calculated using:
     {pctile} percentile;
-    climatology period is {ts[0,0][tdim].dt.year.values}-{ts[-1,0][tdim].dt.year.values}'; 
+    climatology period is {dum[0]}-{dum[0]}'; 
     window half width used for percentile is {windowHalfWidth}"""
+    if skipna:
+        params = params + f"""; NaNs where skipped in percentile and mean
+        calculations"""
     if smoothPercentile:
-        params = params + f";  width of moving average window to smooth percentile is {smoothPercentileWidth}"
+        params = params + f"""; width of moving average window to 
+                 smooth percentile is {smoothPercentileWidth}"""
+    if anynans:
+        params = params + f"""; any grid point with even only 1 NaN along time
+        axis has been removed from calculation"""
     ds.attrs['xmhw_parameters'] = params 
     return ds
 
 
+def calc_clim(ts, tdim, pctile, windowHalfWidth, smoothPercentile,
+              smoothPercentileWidth, Ly, skipna):
+    """Calculate climatologies.
 
-@dask.delayed(nout=1)
-def calc_thresh(ts, windowHalfWidth=5, pctile=90, smoothPercentile=True,
-                smoothPercentileWidth=31, Ly=False, tdim='time', skipna=False):
-    """ Calculate threshold for one cell grid at the time
+    Parameters
+    ----------
+    ts: xarray DataArray
+        Temperature timeseries array
+    tdim: str
+        Name of time dimension
+    pctile: int
+        Threshold percentile used to detect events
+    windowHalfWidth: int
+        Half width of window about day-of-year used for the pooling of
+        values and calculation of threshold percentile
+    smoothPercentile: bool
+        If True smooth the threshold percentile timeseries with a
+        moving average
+    smoothPercentileWidth: int
+        Width of moving average window for smoothing threshold in days,
+        has to be odd number
+    Ly: bool
+        If True the length of the year is < 365/366 days (e.g. a 360 day
+        year from a climate model). This affects the calculation
+        of the climatology
+    skipna: bool
+        If True percentile and mean function will use skipna=True.
+        Using skipna option is much slower
+
+    Returns
+    -------
+    thresh_climYear: xarray DataArray
+        Climatological threshold for the grid cell
+    seas_climYear: xarray DataArray
+        Climatological mean for the grid cell 
     """
-    twindow = window_roll(ts, windowHalfWidth, tdim)
 
-    # rechunk twindow otherwise it is passed to dask_percentile as a numpy array 
+    twindow = window_roll(ts, windowHalfWidth, tdim)
+    # Rechunk twindow so all timeseries is in 1 chunk 
     twindow = twindow.chunk({'z': -1})
     
-     # Calculate threshold and seasonal climatology across years
-    thresh_climYear = (twindow
-                       .groupby('doy')
-                       .quantile(pctile/100., dim='z', skipna=skipna))
-                       #.reduce(dask_percentile, dim='z', q=pctile)).compute()
-                       #.reduce(np.nanpercentile, dim='z', q=pctile))
-    seas_climYear = (twindow
-                       .groupby('doy')
-                       .mean(dim='z', skipna=skipna))
-                       #.reduce(np.nanmean)).compute()
+    # Calculate threshold and seasonal climatology across years
+    thresh_climYear = calculate_thresh(twindow, pctile, skipna)
+    seas_climYear = calculate_seas(twindow, skipna) 
 
-    ds = smooth_thresh(thresh_climYear, seas_climYear, smoothPercentile, smoothPercentileWidth, Ly)
-    return ds
-
-    #return thresh_climYear, seas_climYear
-
-
-def smooth_thresh(thresh_climYear, seas_climYear, smoothPercentile,
-                smoothPercentileWidth, Ly):
-
-    # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
-    # add this is done only if calendar include 29Feb 
-    thresh_climYear = thresh_climYear.where(thresh_climYear.doy!=60, feb29(thresh_climYear))
-    seas_climYear = seas_climYear.where(seas_climYear.doy!=60, feb29(seas_climYear))
-    thresh_climYear = thresh_climYear.chunk({'doy': -1})
-    seas_climYear = seas_climYear.chunk({'doy': -1})
-    # If the length of year is < 365/366 (e.g. a 360 day year from a Climate Model)
+    # If smooth option on smooth both climatologies
     if smoothPercentile:
-        if Ly:
-            valid = ~np.isnan(thresh_climYear)
-            thresh_climYear.where(~valid, runavg(thresh_climYear, smoothPercentileWidth))
-            seas_climYear.where(~valid, runavg(seas_climYear, smoothPercentileWidth))
-        # >= 365-day year
-        else:
-            thresh_climYear = runavg(thresh_climYear, smoothPercentileWidth)
-            seas_climYear = runavg(seas_climYear, smoothPercentileWidth)
+        thresh_climYear = smooth_clim(thresh_climYear, smoothPercentileWidth, Ly)
+        seas_climYear = smooth_clim(seas_climYear, smoothPercentileWidth, Ly)
 
-  # fix name of arrays
-    thresh_climYear.name = 'threshold'
-    seas_climYear.name = 'seasonal'
-    # Save vector indicating which points in temp are missing values
-    #missing = np.isnan(ts)
-    # Set all remaining missing temp values equal to the climatology
-    #seas_climYear = xr.where(missing, ts, seas_climYear)
-
-    # Save in dataset
-    ds = xr.Dataset() 
-    ds['thresh'] = thresh_climYear
-    ds['seas'] = seas_climYear
-    #ds['missing'] = missing
-    return ds
+    return thresh_climYear, seas_climYear
 
 
-def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=None, 
-           coldSpells=False, tdim='time', intermediate=False, anynans=False): 
+def smooth_clim(clim, smoothPercentileWidth, Ly):
+    """Smooth climatology timeseries using a running average.
+
+    Parameters
+    ----------
+    clim: xarray DataArray
+        climatology timeseries to smooth
+    smoothPercentileWidth: int
+        Width of moving average window for smoothing threshold in days,
+        has to be odd number
+    Ly: bool
+        If True the length of the year is < 365/366 days (e.g. a 360 day
+        year from a climate model). This affects the calculation
+        of the climatology
+
+    Returns
+    -------
+    clim: xarray DataArray
+        smoothed climatology timeseries
     """
 
-    Applies the Hobday et al. (2016) marine heat wave definition to an input time
-    series of temp ('temp') along with a time vector ('t'). Outputs properties of
-    all detected marine heat waves.
+    # If the length of year is < 365/366 (e.g. a 360 day year from a 
+    # Climate Model)
+    if Ly:
+        valid = ~np.isnan(clim)
+        clim.where(~valid, runavg(clim, smoothPercentileWidth))
+    else:
+        clim = runavg(clim, smoothPercentileWidth)
+    return clim 
 
-    Inputs:
 
-      temp    Temperature array [1D  xarray of length T]
-      clim    Climatology of SST. Each key (following list) is a seasonally-varying
-              time series [1D numpy array of length T] of a particular measure:
+def detect(temp, th, se, tdim='time', minDuration=5, joinGaps=True,
+           maxGap=2, maxPadLength=None, coldSpells=False,
+           intermediate=False, anynans=False): 
+    """Applies the Hobday et al. (2016) marine heat wave definition to
+    a temperature timeseries. Returns properties of all detected MHWs.
 
-        'th'               Seasonally varying threshold (e.g., 90th percentile)
-        'se'                 Climatological seasonal cycle
-        'missing'              A vector of TRUE/FALSE indicating which elements in 
-                               temp were missing values for the MHWs detection
-
-      
+    Parameters
+    ----------
+    temp: xarray DataArray
+        Temperature timeseries array
+    th: xarray DataArray
+        Climatological threshold (e.g., 90th percentile)
+    se: xarray DataArray
+        Climatological mean
+    tdim: str, optional
+        Name of time dimension (default='time')
+    minDuration: int, optional
+        Minimum duration (days) to accept detected MHWs (default=5)
+    joinGaps: bool, optional
+       If True join MHWs separated by a short gap (default is True)
+    maxGap: int, optional
+        Maximum limit of gap length (days) between events (default=2)
+    maxPadLength: int, optional
+        Specifies the maximum length (days) over which to interpolate
+        NaNs in input temp time series. i.e., any consecutive blocks of
+        NaNs with length greater than maxPadLength will be left as
+        NaN. If None it does not interpolate (default is None).
+    coldSpells: bool, optional
+        If True the code detects cold events instead of heat events
+        (default is False)
+    intermediate: bool, optional
+        If True return also dataset with input data, detected events
+        and some events properties along time axis (default is False)
+    anynans: bool, optional
+        Defines in land_check which cells will be dropped, if False
+        only ones with all NaNs values, if True all cells with even
+        1 NaN along time dimension will be dropped (default is False)
     
-    Outputs:
-
-      mhw     Detected marine heat waves (MHWs). Each key (following list) is a
-              list of length N where N is the number of detected MHWs:
-              ....
-      ds      stacked dataset with sst and climatologies along time axis - Optional only if intermediate is True
-
-
-    Options:
-
-      minDuration            Integer: minimum duration for acceptance detected MHWs
-                             (DEFAULT = 5 [days])
-      joinAcrossGaps         Boolean: switch indicating whether to join MHWs      
-                             which occur before/after a short gap (DEFAULT = True)
-      maxGap                 Maximum length of gap allowed for the joining of MHWs
-                             (DEFAULT = 2 [days])
-      maxPadLength           Integer: specifies the maximum length [days] over which to interpolate
-                             (pad) missing data (specified as nans) in input temp time series.
-                             i.e., any consecutive blocks of NaNs with length greater
-                             than maxPadLength will be left as NaN.
-                             (DEFAULT = None, interpolates over all missing values, boolean).
-      coldSpells             Boolean: specifies if the code should detect cold events instead of
-                             heat events. (DEFAULT = False)
-      tdim                   String: name of time dimension. (DEFAULT='time')
-      intermediate           Boolean: if True also output stacked dataset with sst and climatologies along time axis. (default: False)
+    Returns
+    -------
+    mhw: xarray Dataset
+        Detected marine heat waves (MHWs). Has new 'events' dimension
+    mhw_inter: xarray Dataset, optional
+        Dataset with input data, detected events and some events
+        properties along time axis. If intermediate is False is None
     """
-  
-   
     
     # check maxGap < minDuration 
     if maxGap >= minDuration:
-        raise XmhwException("Maximum gap between mhw events should be smaller than event minimum duration")
+        raise XmhwException("Maximum gap between mhw events should" +
+                            " be smaller than event minimum duration")
     # if time dimension different from time, rename it
     temp = temp.rename({tdim: 'time'})
-    # save original attributes in a dictionary to be assigned to final dataset
+    # save original attributes in a dictionary to assign to final dataset
     ds_attrs = {}
     ds_attrs['ts'] = temp.attrs
     #ds_attrs[tdim+'encoding'] = temp.encoding
     for c in temp.coords:
         ds_attrs[c] = temp[c].attrs
 
-    # return an array stacked on all dimensions excluding time
-    # Land cells are removed
-    # new dimensions are (time, cell)
-    ts = land_check(temp, removeNans=anynans)
-    th = land_check(th, tdim='doy', removeNans=anynans)
-    se = land_check(se, tdim='doy', removeNans=anynans)
+    # Returns an array stacked on all dimensions excluded time, doy
+    # Land cells are removed and new dimensions are (time,cell)
+    ts = land_check(temp, anynans=anynans)
+    del temp
+    th = land_check(th, tdim='doy', anynans=anynans)
+    se = land_check(se, tdim='doy', anynans=anynans)
     # assign doy 
     ts = add_doy(ts)
-    # reindex climatologies along time axis
-    thresh = th.sel(doy=ts.doy)
-    seas = se.sel(doy=ts.doy)
 
-    # Linearly interpolate to replace all consecutive missing blocks of length <= maxPadLength
+    # Linear interpolation of all consecutive missing blocks
+    # of length <= maxPadLength
+    # NB by default maxPadLength is None and there is no interpolation
     if maxPadLength:
-        ts = ts.intepolate_na(dim=tdim, max_gap=maxPadLength)
+        ts = ts.interpolate_na(dim=tdim, max_gap=maxPadLength)
     # Flip temp time series if detecting cold spells
     if coldSpells:
         ts = -1.*ts
 
-    # Find MHWs as exceedances above the threshold
-    #
-
-    # Time series of "True" when threshold is exceeded, "False" otherwise
-    bthresh = ts > thresh
-    bthresh.name = 'bthresh'
-    # join timeseries arrays in dataset to pass to map_blocks
-    # so data can be split by chunks
-    ds = xr.Dataset({'ts': ts, 'seas': seas, 'thresh': thresh, 'bthresh': bthresh})
-    ds = ds.reset_coords(drop=True)
-    ds = ds.chunk(chunks={'time': -1, 'cell': 1})
     # Build a pandas series with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
-    idxarr = pd.Series(data=np.arange(len(ds.time)), index=ds.time.values)
+    idxarr = pd.Series(data=np.arange(len(ts.time)), index=ts.time.values)
+
+    # Loop over each cell to detect MHW events, define_events()
+    # is delayed, so loop is automatically run in parallel
     mhwls = []
-    for c in ds.cell:
-        mhwls.append(  define_events(ds.sel(cell=c), idxarr,
-                     minDuration, joinAcrossGaps, maxGap, intermediate))
+    for c in ts.cell:
+        mhwls.append(define_events(ts.sel(cell=c), th.sel(cell=c),
+                     se.sel(cell=c), idxarr, minDuration,
+                     joinGaps, maxGap, intermediate))
     results = dask.compute(mhwls)
+
+    # Concatenate results and save as dataset
     mhw_results = [r[0] for r in results[0]]
-    mhw = xr.concat(mhw_results, dim=ds.cell)
+    mhw = xr.concat(mhw_results, dim=ts.cell)
     mhw = mhw.unstack('cell')
     if intermediate:
         inter_results = [r[1] for r in results[0]]
-        mhw_inter = xr.concat(inter_results, dim=ds.cell).unstack('cell')
+        mhw_inter = xr.concat(inter_results, dim=ts.cell).unstack('cell')
         mhw_inter = mhw_inter.rename({'index': 'time'})
         mhw_inter = mhw_inter.squeeze(drop=True)
-    #del mhw_results, inter_results 
     # if point dimension was added in land_check remove
     mhw = mhw.squeeze(drop=True)
 
@@ -318,20 +355,25 @@ def detect(temp, th, se, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLen
     if coldSpells:
         mhw = flip_cold(mhw)
     
+    # add previously saved attributes to ds
     mhw  = annotate_ds(mhw, ds_attrs, 'mhw')
     # add all parameters used to global attributes 
-    params = f"""MHW detected using:
-    {minDuration} days of minimum duration;
-        where original timeseries had missing values interpolation was used to fill gaps;"""
-    if  maxPadLength:
-        params = params + f"; if gaps were more than {maxPadLength} days long, they were left as NaNs"
+    params = f"MHW detected using: {minDuration} days of minimum duration"
+    if joinGaps:
+        params = (params + 
+             f"; events separated by {maxGap} or less days were joined")
     if coldSpells:
-        params = params + f"; cold events were detected instead of heat events"
-    if joinAcrossGaps:
-        params = params + f";  events separated by {maxGap} or less days were joined"
+        params = (params + 
+             f"; cold events were detected instead of heat events")
+    if maxPadLength:
+        params = params + f"""; where original timeseries had missing values
+        interpolation was used to fill them. Gaps > {maxPadLength} days
+         long were left as NaNs;"""
+    if anynans:
+        params = params + f"""; any grid point with even only 1 NaN along time
+        axis has been removed from calculation"""
     mhw.attrs['xmhw_parameters'] = params 
     if intermediate:
-        mhw_inter.squeeze(drop=True)
         return mhw, mhw_inter 
-    return mhw 
+    return mhw
 
