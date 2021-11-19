@@ -25,9 +25,18 @@ import xarray.testing as xrtest
 import pandas.testing as pdtest
 
 
-def test_add_doy(oisst_ts, oisst_doy):
+def test_add_doy(oisst_ts, oisst_doy, days5_doy, mon_doy):
     doy = add_doy(oisst_ts, tdim="time").doy.values 
     nptest.assert_array_equal(doy, oisst_doy) 
+    # test with tstep true and 5 days averaged timeseries
+    sst5, doys5 = days5_doy
+    doy = add_doy(sst5, tdim="time", keep_tstep=True).doy.values 
+    nptest.assert_array_equal(doy, doys5) 
+    # test with tstep true and 5 days averaged timeseries
+    sstmon, doysmon = mon_doy
+    doy = add_doy(sstmon, tdim="time", keep_tstep=True).doy.values 
+    nptest.assert_array_equal(doy, doysmon) 
+
 
 
 def test_feb29(oisst_ts):

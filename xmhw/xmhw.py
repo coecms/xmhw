@@ -219,7 +219,7 @@ def calc_clim(ts, tdim, pctile, windowHalfWidth, smoothPercentile,
 
 def detect(temp, th, se, tdim='time', minDuration=5, joinGaps=True,
            maxGap=2, maxPadLength=None, coldSpells=False,
-           intermediate=False, anynans=False): 
+           intermediate=False, anynans=False, tstep=False): 
     """Applies the Hobday et al. (2016) marine heat wave definition to
     a temperature timeseries. Returns properties of all detected MHWs.
 
@@ -254,6 +254,10 @@ def detect(temp, th, se, tdim='time', minDuration=5, joinGaps=True,
         Defines in land_check which cells will be dropped, if False
         only ones with all NaNs values, if True all cells with even
         1 NaN along time dimension will be dropped (default is False)
+    tstep: bool, optional
+        If True the timeseries timestep is used as base for 'doy' unit 
+        To use with any but 365/366 days year daily files
+        (default is False)
     
     Returns
     -------

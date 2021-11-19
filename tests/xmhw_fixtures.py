@@ -73,6 +73,25 @@ def oisst_doy():
     return np.concatenate((b,a)) 
 
 
+@pytest.fixture(scope="module")
+def days5_doy():
+    # Averaging every 5 days to test add_doy with different timesteps
+    ds = xr.open_dataset(oisst)
+    sst = ds.sst.coarsen(time=5, boundary='trim').mean()
+    a = np.arange(1,74)
+    doys = np.concatenate((a,a))
+    return sst, doys 
+
+@pytest.fixture(scope="module")
+def mon_doy():
+    # Averaging every month to test add_doy with different timesteps
+    ds = xr.open_dataset(oisst)
+    sst = ds.sst.resample(time='1M').mean()
+    a = np.arange(1,13)
+    doys = np.concatenate((a,a))
+    return sst, doys 
+
+
 @pytest.fixture
 def tstack():
     return np.array([ 16.99, 17.39, 16.99, 17.39, 17.3 , 17.39, 17.3 ])
