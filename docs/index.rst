@@ -10,8 +10,13 @@ Welcome to xmhw's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-   readme.rst
    gettingstarted.rst
+   starting.rst
+   threshold.rst
+   detect.rst
+   block_average.rst
+   dask.rst
+   frequency.rst
 
 
 

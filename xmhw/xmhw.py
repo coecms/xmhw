@@ -153,14 +153,15 @@ def threshold(temp, tdim='time', climatologyPeriod=[None,None], pctile=90,
     climatology period is {dum[0]}-{dum[0]}'; 
     window half width used for percentile is {windowHalfWidth}"""
     if skipna:
-        params = params + f"""; NaNs where skipped in percentile and mean
-        calculations"""
+        params = params + f""";
+            NaNs where skipped in percentile and mean calculations"""
     if smoothPercentile:
-        params = params + f"""; width of moving average window to 
-                 smooth percentile is {smoothPercentileWidth}"""
+        params = params + f""";
+         width of moving average window to smooth percentile is {smoothPercentileWidth}"""
     if anynans:
-        params = params + f"""; any grid point with even only 1 NaN along time
-        axis has been removed from calculation"""
+        params = params + f""";
+            any grid point with even only 1 NaN along time
+            axis has been removed from calculation"""
     ds.attrs['xmhw_parameters'] = params 
     return ds
 
@@ -333,18 +334,19 @@ def detect(temp, th, se, tdim='time', minDuration=5, joinGaps=True,
     # add all parameters used to global attributes 
     params = f"MHW detected using: {minDuration} days of minimum duration"
     if joinGaps:
-        params = (params + 
-             f"; events separated by {maxGap} or less days were joined")
+        params = params + f""";
+            events separated by {maxGap} or less days were joined"""
     if coldSpells:
-        params = (params + 
-             f"; cold events were detected instead of heat events")
+        params = params + f""";
+                cold events were detected instead of heat events"""
     if maxPadLength:
-        params = params + f"""; where original timeseries had missing values
-        interpolation was used to fill them. Gaps > {maxPadLength} days
-         long were left as NaNs;"""
+        params = params + f""";
+            where original timeseries had missing values interpolation
+            was used to fill them. Gaps > {maxPadLength} days long were left as NaNs;"""
     if anynans:
-        params = params + f"""; any grid point with even only 1 NaN along time
-        axis has been removed from calculation"""
+        params = params + f""";
+            any grid point with even only 1 NaN along time
+            axis has been removed from calculation"""
     mhw.attrs['xmhw_parameters'] = params 
     if intermediate:
         return mhw, mhw_inter 

@@ -1,6 +1,6 @@
-=============================
+================================================
  `xmhw <https://xmhw.readthedocs.io/en/stable>`_
-=============================
+================================================
 
 XMHW - Xarray based Marine HeatWave code -  
 
@@ -26,9 +26,4 @@ Install
     git clone 
     cd xmhw
     python setup.py install ( --user ) if you want to install it in ~/.local
----
-Use
----
-
-~~~~~
 

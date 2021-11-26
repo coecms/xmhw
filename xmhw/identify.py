@@ -383,7 +383,7 @@ def define_events(ts, th, se, idxarr,  minDuration, joinGaps,
     mhw_inter = None
     if intermediate:
         df = df.drop(columns=['doy', 'cell', 'time', 'start', 'end',
-                              'anom_plus', 'anom_minus'])
+                              'anom_plus', 'anom_minus', 'quantile'])
         mhw_inter = xr.Dataset.from_dataframe(df, sparse=False)
     del df
     return mhw, mhw_inter 
