@@ -8,8 +8,6 @@ install:
 
     - conda config --set always_yes yes --set changeps1 no
     - conda create -n travis python=$TRAVIS_PYTHON_VERSION
-    - conda env update -n travis -f conda/dev-environment.yml
-    - if [ -f conda/dev-environment-py${TRAVIS_PYTHON_VERSION}.yml ]; then conda env update -n travis -f conda/dev-environment-py${TRAVIS_PYTHON_VERSION}.yml; fi
     - source activate travis
 
     - pip install --upgrade pytest coverage codecov codeclimate-test-reporter
