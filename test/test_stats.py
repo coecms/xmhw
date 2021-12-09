@@ -46,7 +46,7 @@ def test_check_variables(inter_data):
     assert sw_temp is True
     assert set(variables) == set(['cats', 'ts', 'index'])
     # case where ts is not included
-    notts = inter_data.drop('ts')
+    notts = inter_data.drop_vars('ts')
     dstime, sw_cats, sw_temp = check_variables(notts)
     variables = [x for x in dstime.variables.keys()]
     assert sw_cats is True
