@@ -21,6 +21,7 @@ from numpy import testing as nptest
 from xmhw.exception import XmhwException
 
 
+@pytest.mark.xfail
 def test_threshold(clim_oisst, clim_oisst_nosmooth, oisst_ts):
     # test exceptions with wrong arguments
     with pytest.raises(XmhwException):
@@ -49,6 +50,7 @@ def test_threshold(clim_oisst, clim_oisst_nosmooth, oisst_ts):
     # add test with 1-dimensional and/or 2-dimensional arrays to make sure it still works 
     # add test with skipna False for this set and one without nans
 
+@pytest.mark.xfail
 def test_detect(oisst_ts, clim_oisst):
 # detect(temp, thresh, seas, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=None, coldSpells=False, tdim='time')
     # test exceptions with wrong arguments

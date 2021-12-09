@@ -69,6 +69,7 @@ def test_get_period():
     xrtest.assert_equal( ons, ons2 )
     xrtest.assert_equal( dec, dec2 )
 
+
 def test_get_rate():
     edge = xr.DataArray([1. , 1.5, 2.5])
     period = xr.DataArray([1, 10.5, 19.5])
@@ -89,11 +90,14 @@ def test_flip_cold():
     xrtest.assert_equal(ds2['intensity_var_dummy'], y) 
     xrtest.assert_equal(ds2['dummy'], y) 
 
+
 def test_unique_dropna():
     pass
 
+
 def test_agg_df():
     pass
+
 
 def test_properties():
     pass

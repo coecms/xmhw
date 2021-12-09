@@ -30,6 +30,7 @@ import pandas.testing as pdtest
 def test_block_average():
     pass
 
+
 def test_cat_days():
     cats = pd.Series(data=[1,2,1,1,2,3,1,4,3,2,1,1,2])
     assert cat_days(cats) == 6
@@ -67,6 +68,7 @@ def test_check_variables(inter_data):
     assert sw_cats is False
     assert sw_temp is True
     assert set(variables) == set(['ts', 'index'])
+
 
 def test_check_coordinates(inter_data):
     inter_stack = land_check(inter_data, tdim='index')
