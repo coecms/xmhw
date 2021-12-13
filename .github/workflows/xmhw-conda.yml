@@ -1,4 +1,4 @@
-name: xmhw-conda
+name: xmhw-conda-install-test
 
 on: [push]
 
