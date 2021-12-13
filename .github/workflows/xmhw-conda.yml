@@ -31,9 +31,9 @@ jobs:
     - name: Test with pytest
       run: |
         conda install pytest coverage codecov codeclimate-test-reporter
-        #pytest
-        coverage run --source xmhw -m py.test
-      after_success:
-        x- codecov
-        codeclimate-test-reporter
+        pytest
+        #coverage run --source xmhw -m py.test
+        #after_success:
+        #x- codecov
+        #codeclimate-test-reporter
 
