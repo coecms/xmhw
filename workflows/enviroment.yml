@@ -1,0 +1,8 @@
+name: stats
+dependencies:
+  - datetime
+  - netcdf4
+  - numpy
+  - pandas
+  - xarray
+  - dask
