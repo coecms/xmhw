@@ -151,10 +151,11 @@ def define_data():
                             dims=['time'], coords={'time': time})
     ts = xr.DataArray(data=[15.6, 17.3, 18.2, 19.5, 19.4, 19.6, 18.1, 17.0, 15.2],
             dims=['time'], coords={'time': time, 'doy': doy})
+            #dims=['doy'], coords={'doy': doy, 'quantile':0.9})
     se = xr.DataArray(data=[15.8, 16.0, 16.2, 16.5, 16.6, 16.4, 16.6, 16.7, 16.4],
                   dims=['doy'], coords={'doy': ts['doy'].values})
     th = xr.DataArray([16.0, 16.7, 17.6, 17.9, 18.1, 18.2, 17.3, 17.2, 17.0],
-                  dims=['doy'], coords={'doy': ts['doy'].values})
+            dims=['doy'], coords={'doy': ts['doy'].values, 'quantile':0.9})
     ts = ts.expand_dims(['lat','lon'])
     ts = ts.stack(cell=(['lat','lon']))
     se = se.expand_dims(['lat','lon'])

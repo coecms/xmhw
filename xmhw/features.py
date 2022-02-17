@@ -87,18 +87,13 @@ def mhw_features(dftime, last):
         Includes MHW characteristics along time index
     """
 
-    # calculate some of the mhw properties aggreagting by events
+    # calculate some of the mhw properties aggregating by events
     df = agg_df(dftime)
     # calculate the rest of the mhw properties
     df = properties(df, dftime.relThresh, dftime.mabs)
     # calculate onset decline rates
     df = onset_decline(df, last)    
     return df
-
-
-def unique_dropna(s):
-    """Apply dropna before calling unique to return only non NaN values"""
-    return s.dropna().unique()
 
 
 def agg_df(df):
@@ -120,8 +115,8 @@ def agg_df(df):
     # using an aggregation dictionary to avoid apply.
     dfout = df.groupby('events').agg(
             event = ('events', 'first'),
-            index_start = ('start', unique_dropna),
-            index_end = ('end', unique_dropna),
+            index_start = ('start', 'first'),
+            index_end = ('end', 'first'),
             time_start = ('time', 'first'),
             time_end = ('time', 'last'),
             relS_imax = ('relSeas', np.argmax),

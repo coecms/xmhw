@@ -15,12 +15,14 @@
 # limitations under the License.
 
 
-from xmhw.features import (mhw_df, properties, unique_dropna, agg_df, get_rate,
+from xmhw.features import (mhw_df, properties, agg_df, get_rate,
                            get_period, get_edge, onset_decline, mhw_features, flip_cold) 
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
 import numpy.testing as nptest
 import xarray.testing as xrtest
+import pandas as pd
+import numpy as np
 
 
 def test_mhw_features():
@@ -89,11 +91,6 @@ def test_flip_cold():
     xrtest.assert_equal(ds2['intensity_sum_dummy'], z) 
     xrtest.assert_equal(ds2['intensity_var_dummy'], y) 
     xrtest.assert_equal(ds2['dummy'], y) 
-
-
-def test_unique_dropna():
-    pass
-
 
 def test_agg_df():
     pass
