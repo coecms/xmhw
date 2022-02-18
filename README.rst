@@ -37,7 +37,8 @@ Install
 ---
 Use
 ---
-Some examples of how to use the functions and explanations of how the functions work are shown in the xmhw_demo.ipynb notebook in the docs folder.
+Some examples of how to use the functions and explanations of how the functions work are shown in the xmhw_demo.ipynb notebook in the docs folder  [https://github.com/coecms/xmhw/blob/master/docs/xmhw_demo.ipynb]. 
+
 We will keep on adding more information to this notebook.
 
 --------------------
