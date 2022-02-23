@@ -1,6 +1,5 @@
 name: xmhw-env 
 dependencies:
-  - datetime
   - netcdf4
   - numpy
   - pandas
