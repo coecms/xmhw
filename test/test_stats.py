@@ -14,11 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#import pytest
+# import pytest
 
 import pandas as pd
-from xmhw.stats import (block_average, check_variables, cat_days,
-                        check_coordinates)
+from xmhw.stats import (
+    block_average,
+    check_variables,
+    cat_days,
+    check_coordinates,
+)
 from xmhw.identify import land_check
 from xmhw_fixtures import *
 from xmhw.exception import XmhwException
@@ -32,7 +36,7 @@ def test_block_average():
 
 
 def test_cat_days():
-    cats = pd.Series(data=[1,2,1,1,2,3,1,4,3,2,1,1,2])
+    cats = pd.Series(data=[1, 2, 1, 1, 2, 3, 1, 4, 3, 2, 1, 1, 2])
     assert cat_days(cats) == 6
     assert cat_days(cats, cat=2) == 4
     assert cat_days(cats, cat=3) == 2
@@ -45,37 +49,37 @@ def test_check_variables(inter_data):
     variables = [x for x in dstime.variables.keys()]
     assert sw_cats is True
     assert sw_temp is True
-    assert set(variables) == set(['cats', 'ts', 'index'])
+    assert set(variables) == set(["cats", "ts", "index"])
     # case where ts is not included
-    notts = inter_data.drop_vars('ts')
+    notts = inter_data.drop_vars("ts")
     dstime, sw_cats, sw_temp = check_variables(notts)
     variables = [x for x in dstime.variables.keys()]
     assert sw_cats is True
     assert sw_temp is False
-    assert set(variables) == set(['cats', 'index'])
+    assert set(variables) == set(["cats", "index"])
     # case where only ts is included as array
-    ts = inter_data['ts']
+    ts = inter_data["ts"]
     dstime, sw_cats, sw_temp = check_variables(ts)
     variables = [x for x in dstime.variables.keys()]
     assert sw_cats is False
     assert sw_temp is True
-    assert set(variables) == set(['ts', 'index'])
-    # case where only ts is included as dataset 
+    assert set(variables) == set(["ts", "index"])
+    # case where only ts is included as dataset
     tsds = xr.Dataset()
-    tsds['ts'] = ts
+    tsds["ts"] = ts
     dstime, sw_cats, sw_temp = check_variables(tsds)
     variables = [x for x in dstime.variables.keys()]
     assert sw_cats is False
     assert sw_temp is True
-    assert set(variables) == set(['ts', 'index'])
+    assert set(variables) == set(["ts", "index"])
 
 
 def test_check_coordinates(inter_data):
-    inter_stack = land_check(inter_data, tdim='index')
+    inter_stack = land_check(inter_data, tdim="index")
     outds, coord = check_coordinates(inter_data)
-    xrtest.assert_equal(inter_stack, outds) 
-    assert coord == 'cell'
-    stacked = inter_stack.rename({'cell': 'other'})
+    xrtest.assert_equal(inter_stack, outds)
+    assert coord == "cell"
+    stacked = inter_stack.rename({"cell": "other"})
     outds, coord = check_coordinates(stacked)
-    xrtest.assert_equal(stacked, outds) 
-    assert coord == 'other'
+    xrtest.assert_equal(stacked, outds)
+    assert coord == "other"
