@@ -30,10 +30,11 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
-        conda install pytest coverage codecov codeclimate-test-reporter
+        conda install pytest coverage codecov
         pytest
-        #coverage run --source xmhw -m py.test
-        #after_success:
-        #x- codecov
-        #codeclimate-test-reporter
+        coverage run --source xmhw -m py.test
+        after_success:
+        x- codecov
+        # codeclimate-test-reporter specifi to python is deprecated and as been replaced by a binary
+        # curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
 
