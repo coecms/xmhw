@@ -1,4 +1,4 @@
-name: stats
+name: base 
 dependencies:
   - datetime
   - netcdf4
