@@ -40,8 +40,8 @@ jobs:
     - name: Test with pytest
       run: |
         conda install pytest coverage codecov
-        pytest
-        coverage run --source xmhw -m py.test
+        conda run pytest
+        conda run coverage run --source xmhw -m py.test
         after_success:
         x- codecov
         # codeclimate-test-reporter specifi to python is deprecated and as been replaced by a binary
