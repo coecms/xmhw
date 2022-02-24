@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - master
+      - timestep
   pull_request:
     branches:
       - master
