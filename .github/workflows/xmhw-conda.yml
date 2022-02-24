@@ -45,7 +45,7 @@ jobs:
         conda install pytest coverage codecov
         conda run python -m pytest
         conda run coverage run --source xmhw -m py.test
-        after_success:
+        if: ${{ success() }}
           curl -Os https://uploader.codecov.io/latest/linux/codecov
           chmod +x codecov
           ./codecov
