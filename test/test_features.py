@@ -30,8 +30,6 @@ from xmhw_fixtures import *
 from xmhw.exception import XmhwException
 import numpy.testing as nptest
 import xarray.testing as xrtest
-import pandas as pd
-import numpy as np
 
 
 def test_mhw_features():
