@@ -46,7 +46,9 @@ jobs:
         conda run python -m pytest
         conda run coverage run --source xmhw -m py.test
         after_success:
-        x- codecov
+          curl -Os https://uploader.codecov.io/latest/linux/codecov
+          chmod +x codecov
+          ./codecov
         # codeclimate-test-reporter specifi to python is deprecated and as been replaced by a binary
         # curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
 
