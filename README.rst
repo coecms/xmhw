@@ -6,8 +6,8 @@ XMHW - Xarray based Marine HeatWave code -
 
 .. image:: https://readthedocs.org/projects/xmhw/badge/?version=latest
   :target: https://xmhw.readthedocs.io/en/stable/
-.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.5652368.svg
-   :target: https://doi.org/10.5281/zenodo.5652368
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.6270280.svg
+   :target: https://doi.org/10.5281/zenodo.6270280
 
 .. content-marker-for-sphinx
 
@@ -26,22 +26,37 @@ As this code uses xarray results are xarray datasets.
 Install
 -------
 
+    You can install the latest version of xmhw directly from conda (coecms channel)
 
-    git clone https://github.com/coecms/xmhw
+    conda install -c coecms -c conda-forge xmhw
+
+    If you want to install an unstable version or a different branch:
+
+    * git clone https://github.com/coecms/xmhw
+    * git checkout <branch-name>   (if installing a a different branch from master)
+    * cd xmhw
+    * python setup.py install or pip install ./
+      use --user with either othe commands if you want to install it in ~/.local
+
     
-    cd xmhw 
-    
-    python setup.py install --user 
-    
-    --user option install the module in ~/.local.
 ---
 Use
 ---
 Some examples of how to use the functions and explanations of how the functions work are shown in the readthedocs documentation linked above and the `xmhw_demo.ipynb notebook <https://github.com/coecms/xmhw/blob/master/docs/xmhw_demo.ipynb>_` in the docs folder.
 
---------------------
-Latest version v 0.7
---------------------
+----------------------
+Latest version v 0.8.0
+----------------------
+
+Main updates:
+    * Added a tstep (timestep) option to use the original timestep of the timeseries passed as input as step, rather than assuming data is daily. This allows to calculate climatologies and detect mhw events at different frequency.
+    * Added conda support
+    * Added readthedocs documentation
+     
+
+---------------
+Version v 0.7.0
+---------------
 
 Main updates:
     * redesigned threshold function, to make it faster
