@@ -3,41 +3,9 @@ package:
     name: xmhw 
     version: {{ version }}
 
-build:
-    number: {{ GIT_DESCRIBE_NUMBER }}
-
-source:
-     
-    url:  https://github.com/coecms/xmhw/archive/refs/tags/{{version}}.tar.gz 
-
-requirements:
-    host:
-        - python
-    build:
-        - python
-    run:
-        - python
-        - pandas
-        - xarray
-        - numpy
-        - dask 
-
-test:
-    source_files:
-        - setup.cfg
-        - test
-    requires:
-        - pytest
-        - numpy
-        - xarray
-        - pandas
-        - dask
-    imports:
-        - xmhw
-
 about:
     home: https://github.com/coecms/xmhw
-    license: Apache 2.0
+    license: Apache-2.0
     license_file: LICENSE-2.0.txt
     summary: "Xarray based Marine HeatWave detection code"
     description: |
@@ -47,3 +15,38 @@ about:
       marineHeatWaves code <https://github.com/ecjoliver/marineHeatWaves/> 
     doc_url:
     dev_url: https://github.com/coecms/xmhw 
+
+requirements:
+    host:
+        - python >= 3.7
+        - pip
+    run:
+        - python >= 3.7
+        - pandas
+        - xarray
+        - numpy
+        - dask 
+
+source:
+    url:  https://github.com/coecms/xmhw/archive/refs/tags/{{version}}.tar.gz 
+
+build:
+    number: {{ GIT_DESCRIBE_NUMBER }}
+    script: python setup.py install --single-version-externally-managed --record=record.txt
+
+test:
+    source_files:
+        - setup.cfg
+        - test
+    requires:
+        - pytest
+        - coverage
+        - numpy
+        - xarray
+        - pandas
+        - dask
+    imports:
+        - xmhw
+    commands:
+        - COVERAGE_FILE=${TEST_OUTPUT:-.}/coverage coverage run --source xmhw -m pytest ./test
+

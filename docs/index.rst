@@ -10,8 +10,8 @@ Welcome to xmhw's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   install.rst
    gettingstarted.rst
-   starting.rst
    threshold.rst
    detect.rst
    block_average.rst
