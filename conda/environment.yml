@@ -1,0 +1,6 @@
+dependencies:
+  - netcdf4
+  - numpy
+  - pandas
+  - xarray
+  - dask

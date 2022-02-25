@@ -1,3 +1,6 @@
 # Add general dependencies here
 # Optional dependencies e.g. [dev] are added in `setup.cfg`
 xarray >= 0.16.0
+pandas
+numpy
+dask

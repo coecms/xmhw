@@ -25,8 +25,11 @@ from .exception import XmhwException
 from .features import mhw_df, mhw_features
 
 
-def add_doy(ts, tdim="time"):
+def add_doy(ts, tdim="time", keep_tstep=False):
     """Add coordinate 'doy' day of the year for a 366 days year.
+
+    If keep_tstep is True use instead original timestep as a 'doy" unit.
+    So for 360 days year doy step is days, for monthly 1 doy is a month.
 
     Parameters
     ----------
@@ -34,6 +37,8 @@ def add_doy(ts, tdim="time"):
         Timeseries array
     tdim: str, optional
         Name of time dimension (default='time')
+    keep_tstep: bool, optional
+        If True base 'doy' unit on original timestep (default=False)
 
     Returns
     -------
@@ -41,23 +46,47 @@ def add_doy(ts, tdim="time"):
         Timeseries array with extra 'doy' coordinate
     """
 
+    # If keeping the timestep as unit for doy:
+    # find out how many tsteps in 1 year, check all years are complete
+    # assign values from 1 to number of tsteps to new coordinate for
+    # each year
+    # Else if using 366-days year:
     # get original dayofyear
     # create filters: from 1st of March onwards and non leap years
     # add extra day if not leap year and march or later
     t = ts[tdim]
-    doy_original = t.dt.dayofyear
-    march_or_later = t.dt.month >= 3
-    not_leap_year = ~t.dt.is_leap_year
-    doy = doy_original + (not_leap_year & march_or_later)
+    if keep_tstep is True:
+        years = np.unique(t.dt.year.values)
+        oneyear = t.where(t.dt.year == years[1]).dropna(dim=tdim)
+        if len(t) % len(oneyear) != 0.0:
+            raise XmhwException(
+                "To use original timestep as "
+                + "climatology base unit, timeseries has to have"
+                + " complete years"
+            )
+        nyears = int(len(t) / len(oneyear))
+        doy_values = np.array(range(1, len(oneyear) + 1))
+        doys = np.stack([doy_values for _ in range(nyears)], axis=0)
+        doys = doys.flatten()
+        doy = xr.DataArray(data=doys, dims=(tdim), coords={"time": t})
+    else:
+        doy_original = t.dt.dayofyear
+        march_or_later = t.dt.month >= 3
+        not_leap_year = ~t.dt.is_leap_year
+        doy = doy_original + (not_leap_year & march_or_later)
     # rechunk and return new doy as coordinate of the "ts" input variable
-    ts.coords['doy'] = doy.chunk({tdim: -1})
+    ts.coords["doy"] = doy.chunk({tdim: -1})
     return ts
 
 
 def get_calendar(time):
     """Retrieve calendar information and return number of days in year.
 
-    NB still working on ...
+    This assumes: Julian calendar can be ignored;
+    gregorian, standard, proleptic_gregorian are all the same.
+    For these we use the add_doy() function to go from a 365.25 calendar
+    to a 366 days calendar by adding 29 Feb for every year.
+    For 360/ 365 /366 days original timestep is used and add_doy() is skipped
 
     Parameters
     ----------
@@ -69,42 +98,45 @@ def get_calendar(time):
     ndays_year: float
         Number of days in a year of timeseries
     """
+
     # define a dictionary mapping calendar to ndays_year
     # check if calendar is part of the time dimension attributes
-    # my assumptions here are Julian can be ignored at best from 1901 onwards we could add 13 days and consider it gregorian
-    # gregorian, standard, proleptic_gregorian are all the same ,as differences happens in the distant past
-    # for these we ant to use add_doy
-    # for 360/ 365 /366 we need different approach, they all can stay as they are but I should then use the original day ofyear admititng this is calculated differently and consistently each time
-    ndays = {'standard': 365.25, 'gregorian': 365.25,
-             'proleptic_gregorian': 365.25, 'all_leap': 366,
-             'noleap': 365, '365_day': 365, '360_day': 360,
-             'julian': 365.25}
-    if 'calendar' in time.encoding.keys():
-        calendar = time.encoding['calendar']
-    elif 'calendar' in time.attrs.keys():
-        calendar = time.attrs['calendar']
+    ndays = {
+        "standard": 365.25,
+        "gregorian": 365.25,
+        "proleptic_gregorian": 365.25,
+        "all_leap": 366,
+        "noleap": 365,
+        "365_day": 365,
+        "360_day": 360,
+        "julian": 365.25,
+    }
+    if "calendar" in time.encoding.keys():
+        calendar = time.encoding["calendar"]
+    elif "calendar" in time.attrs.keys():
+        calendar = time.attrs["calendar"]
     else:
-        calendar = getattr(time.values[0], 'calendar', '')
-    if calendar == '':
-        #calendar = infer_calendar(tdim)
+        calendar = getattr(time.values[0], "calendar", "")
+    if calendar == "":
+        # calendar = infer_calendar(tdim)
         pass
     # if calendar was retrieved by variable attributes is possible it
-    # was wrongly defined 
-    if calendar in ['360', '365', '366']:
-        calendar = f'{calendar}_day'
-    elif calendar == 'leap':
-        calendar = 'standard'
+    # was wrongly defined
+    if calendar in ["360", "365", "366"]:
+        calendar = f"{calendar}_day"
+    elif calendar == "leap":
+        calendar = "standard"
     if calendar not in ndays.keys():
-        print('calendar not in keys')
-        ndays_year = 365.25 # just to return something valid now
+        print("calendar not in keys")
+        ndays_year = 365.25  # just to return something valid now
     else:
         ndays_year = ndays[calendar]
     return ndays_year
 
 
-def feb29(ts, dim='doy'):
+def feb29(ts, dim="doy"):
     """Calculate values for 29Feb by averaging days 28,29 Feb and 1 Mar
-    
+
     Original code ignores values for 29 Feb, and uses only 28 Feb and
     1 Mar values. To replicate comment/uncomment return options.
 
@@ -112,9 +144,11 @@ def feb29(ts, dim='doy'):
     -------
         Interpolated values for Feb29
     """
-    return (ts.where(ts.doy.isin([59,60,61]),drop=True).mean(
-            dim=dim, skipna=True).values)
-    #return (ts.where(ts.doy.isin([59,61]),drop=True).mean(
+    return (
+        ts.where(ts.doy.isin([59, 60, 61]), drop=True).mean(
+            dim=dim, skipna=True).values
+    )
+    # return (ts.where(ts.doy.isin([59,61]),drop=True).mean(
     #         dim=dim, skipna=True).values)
 
 
@@ -137,15 +171,18 @@ def runavg(ts, w):
     ts_avg: xarray DataArray
         Averaged timeseries
     """
-    if w%2 == 0:
+    if w % 2 == 0:
         raise XmhwException("Running average window should be odd")
-    ts_avg = (ts.pad(doy=(w-1)//2, mode='wrap')
-                .rolling(doy=w, center=True)
-                .mean().dropna(dim='doy'))
+    ts_avg = (
+        ts.pad(doy=(w - 1) // 2, mode="wrap")
+        .rolling(doy=w, center=True)
+        .mean()
+        .dropna(dim="doy")
+    )
     return ts_avg
 
 
-def window_roll(ts, w, tdim): 
+def window_roll(ts, w, tdim):
     """Return all values falling in -w/+w window from each day-of-year
     and build new timeseries.
 
@@ -164,17 +201,17 @@ def window_roll(ts, w, tdim):
         Stacked array timeseries with new 'z' dimension representing
         a window of width 2*w+1
     """
-    
-    width = 2*w+1
+
+    width = 2 * w + 1
     dtime = {tdim: width}
-    trolled = ts.rolling(**dtime, center=True).construct('wdim')
-    troll = trolled.stack(z=('wdim', tdim))
-    twindow = troll.dropna(dim='z')
+    trolled = ts.rolling(**dtime, center=True).construct("wdim")
+    troll = trolled.stack(z=("wdim", tdim))
+    twindow = troll.dropna(dim="z")
     return twindow
 
 
 @dask.delayed(nout=1)
-def calculate_thresh(twindow, pctile, skipna):
+def calculate_thresh(twindow, pctile, skipna, tstep):
     """Calculate threshold for one cell grid at the time
 
     Parameters
@@ -184,7 +221,7 @@ def calculate_thresh(twindow, pctile, skipna):
         a window of width 2*w+1
     pctile: int
         Threshold percentile used to detect events
-    skipna: bool 
+    skipna: bool
         If True percentile and mean function will use skipna=True.
         Using skipna option is much slower
 
@@ -194,26 +231,28 @@ def calculate_thresh(twindow, pctile, skipna):
         Climatological threshold
     """
 
-    thresh_climYear = (twindow
-                       .groupby('doy')
-                       .quantile(pctile/100., dim='z', skipna=skipna))
+    thresh_climYear = twindow.groupby("doy").quantile(
+        pctile / 100.0, dim="z", skipna=skipna
+    )
     # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
-    thresh_climYear = thresh_climYear.where(thresh_climYear.doy!=60, 
-                                            feb29(thresh_climYear))
-    thresh_climYear = thresh_climYear.chunk({'doy': -1})
+    if tstep is False:
+        thresh_climYear = thresh_climYear.where(
+            thresh_climYear.doy != 60, feb29(thresh_climYear)
+        )
+    thresh_climYear = thresh_climYear.chunk({"doy": -1})
     return thresh_climYear
 
 
 @dask.delayed(nout=1)
-def calculate_seas(twindow, skipna):
-    """ Calculate mean climatology for one cell grid at the time
+def calculate_seas(twindow, skipna, tstep):
+    """Calculate mean climatology for one cell grid at the time
 
     Parameters
     ----------
     twindow: xarray DataArray
         Stacked array timeseries with new 'z' dimension representing
         a window of width 2*w+1
-    skipna: bool 
+    skipna: bool
         If True percentile and mean function will use skipna=True.
         Using skipna option is much slower
 
@@ -222,13 +261,13 @@ def calculate_seas(twindow, skipna):
     seas_climYear: xarray DataArray
         Climatological mean
     """
-    seas_climYear = (twindow
-                       .groupby('doy')
-                       .mean(dim='z', skipna=skipna))
+    seas_climYear = twindow.groupby("doy").mean(dim="z", skipna=skipna)
     # calculate value for 29 Feb from mean of 28-29 feb and 1 Mar
-    seas_climYear = seas_climYear.where(seas_climYear.doy!=60,
-                                        feb29(seas_climYear))
-    seas_climYear = seas_climYear.chunk({'doy': -1})
+    if tstep is False:
+        seas_climYear = seas_climYear.where(
+            seas_climYear.doy != 60, feb29(seas_climYear)
+        )
+    seas_climYear = seas_climYear.chunk({"doy": -1})
     return seas_climYear
 
 
@@ -245,18 +284,18 @@ def join_gaps(st, end, events, maxGap):
     events: pandas series
         MHW events
     maxGap: int
-        Maximum limit of gap length (days) between events 
+        Maximum limit of gap length (days) between events
 
     Returns
     -------
     joined: pandas Dataframe
-        Includes series for joined events, start and end indexes 
+        Includes series for joined events, start and end indexes
     """
 
     # remove NaNs
     # build (st,end) pairs
     # shift end series to align with st series: first value is set to
-    # maxGap+1 so start of first event is always kept 
+    # maxGap+1 so start of first event is always kept
     # subtract shifted end series form start one to get gaps' lengths
     # and select as True all gaps > maxGap
     # use gaps series as selected events start indexes
@@ -268,33 +307,32 @@ def join_gaps(st, end, events, maxGap):
     s = st.dropna()
     e = end.dropna()
     if len(s) > 1:
-        pairs = set(zip(s.values,e.values))
+        pairs = set(zip(s.values, e.values))
         eshift = e.shift(1)
-        eshift = eshift.fillna(value=-(maxGap+1))
-        gaps = ((s - eshift) > maxGap + 1)
+        eshift = eshift.fillna(value=-(maxGap + 1))
+        gaps = (s - eshift) > maxGap + 1
         gaps_shifted = gaps.shift(-1)
         gaps_shifted = gaps_shifted.fillna(value=True)
         s = s.where(gaps).dropna()
         e = e.where(gaps_shifted).dropna()
         if len(s) < len(st.dropna()):
-            joined = set(zip(s.values,e.values)) - pairs
+            joined = set(zip(s.values, e.values)) - pairs
             events = join_events(events, joined)
         st = s.reindex_like(st)
         end = e.reindex_like(end)
     else:
         pass
-    joined = pd.concat([st.rename('start'), end.rename('end'), events],
-                       axis=1) 
-    return  joined 
+    joined = pd.concat([st.rename("start"), end.rename("end"), events], axis=1)
+    return joined
 
 
 @dask.delayed(nout=2)
-def define_events(ts, th, se, idxarr,  minDuration, joinGaps,
-                  maxGap, intermediate):
+def define_events(ts, th, se, idxarr, minDuration, joinGaps, maxGap,
+                  intermediate):
     """Finds all MHW events of duration >= minDuration and calculate
     their properties.
 
-    If joinGaps is True than joins any event that is separated by 
+    If joinGaps is True than joins any event that is separated by
     a number of days <= maxGap
 
     Parameters
@@ -306,7 +344,7 @@ def define_events(ts, th, se, idxarr,  minDuration, joinGaps,
     se: pandas Series
         Climatological mean
     idxarr: pandas Series
-        Index array 
+        Index array
     minDuration: int
         Minimum duration (days) to accept of detected MHWs
     joinGaps: bool
@@ -333,35 +371,44 @@ def define_events(ts, th, se, idxarr,  minDuration, joinGaps,
     # Find MHWs as exceedances above the threshold
     # Time series of "True" when threshold is exceeded
     bthresh = ts > thresh
-    ds = xr.Dataset({'ts': ts, 'seas': seas, 'thresh': thresh,
-                     'bthresh': bthresh})
+    ds = xr.Dataset({"ts": ts, "seas": seas, "thresh": thresh,
+                     "bthresh": bthresh})
 
     # Convert xarray dataset to pandas dataframe, as groupby operations
     # are faster in pandas
     df = ds.to_dataframe()
     del ds
 
-    # detect events 
-    dfev = mhw_filter(df.bthresh, idxarr, minDuration, joinGaps,
-                      maxGap)
+    # detect events
+    dfev = mhw_filter(df.bthresh, idxarr, minDuration, joinGaps, maxGap)
 
     # Prepare dataframe to get features before groupby operation
-    df = mhw_df(pd.concat([df,dfev], axis=1))
+    df = mhw_df(pd.concat([df, dfev], axis=1))
     del dfev
 
-    # Calculate mhw properties, for each event using groupby 
-    dfmhw = mhw_features(df, len(idxarr)-1)
+    # Calculate mhw properties, for each event using groupby
+    dfmhw = mhw_features(df, len(idxarr) - 1)
 
-    # Convert back to xarray dataset 
+    # Convert back to xarray dataset
     mhw = xr.Dataset.from_dataframe(dfmhw, sparse=False)
     del dfmhw
     mhw_inter = None
     if intermediate:
-        df = df.drop(columns=['doy', 'cell', 'time', 'start', 'end',
-                              'anom_plus', 'anom_minus'])
+        df = df.drop(
+            columns=[
+                "doy",
+                "cell",
+                "time",
+                "start",
+                "end",
+                "anom_plus",
+                "anom_minus",
+                "quantile",
+            ]
+        )
         mhw_inter = xr.Dataset.from_dataframe(df, sparse=False)
     del df
-    return mhw, mhw_inter 
+    return mhw, mhw_inter
 
 
 def mhw_filter(bthresh, idxarr, minDuration, joinGaps, maxGap=2):
@@ -373,7 +420,7 @@ def mhw_filter(bthresh, idxarr, minDuration, joinGaps, maxGap=2):
     bthresh: boolean pandas Series
         True values where ts >= threshold for same day-of-year
     idxarr: pandas Series
-        Index array 
+        Index array
     minDuration: int
         Minimum duration (days) to accept detected MHWs
     joinGaps: bool
@@ -386,7 +433,7 @@ def mhw_filter(bthresh, idxarr, minDuration, joinGaps, maxGap=2):
     df: pandas Dataframe
         Includes series for events and their start and end indexes
     """
-    # Build another array where the last index before the start of 
+    # Build another array where the last index before the start of
     # a succession of Trues is propagated while False points retain
     # their positional indexes
     # events = [0,1,2,3,3,3,3,3,3,9,10,...]
@@ -401,7 +448,7 @@ def mhw_filter(bthresh, idxarr, minDuration, joinGaps, maxGap=2):
     # itself, the last day of the mhw will have a negative value
     # this is also indicative of the duration of the event.
     # The series is then shifted back one place to the left and
-    # the boundaries nan are replaced with zeros 
+    # the boundaries nan are replaced with zeros
     # shifted = [nan,0,0,0,1,1,1,1,-5,0,0,...]
     shifted = (events_map - events_map.shift(+1)).shift(-1)
     shifted = shifted.where(~np.isnan(shifted), -events_map)
@@ -409,10 +456,10 @@ def mhw_filter(bthresh, idxarr, minDuration, joinGaps, maxGap=2):
     # select only cells where shifted is less equal to the -minDuration,
     duration = events_map.where(shifted <= -minDuration)
     # from idxarr select where mhw duration is not NaN,
-    # this will the index of last day of mhw  
-    end = idxarr.where( ~np.isnan(duration))
+    # this will the index of last day of mhw
+    end = idxarr.where(~np.isnan(duration))
     # removing duration from end index gives starting index
-    st = (end - duration + 1)
+    st = end - duration + 1
 
     # add 1 to events so each event is represented by its starting index
     events = events + 1
@@ -420,21 +467,21 @@ def mhw_filter(bthresh, idxarr, minDuration, joinGaps, maxGap=2):
     # Selected mhw will be represented by indexes where "events" has
     # values included in st series and where "events_map" is not 0
     sel_events = events.where(events.isin(st) & (events_map != 0))
-    sel_events.name = 'events'
+    sel_events.name = "events"
 
     # if joinGaps call join_gaps function
     if joinGaps:
         df = join_gaps(st, end, sel_events, maxGap)
     else:
-        df = pd.concat([st.rename('start'), end.rename('end'),
-                        sel_events], axis=1)
-    return  df
+        df = pd.concat([st.rename("start"), end.rename("end"), sel_events],
+                       axis=1)
+    return df
 
 
-def land_check(temp, tdim='time', anynans=False):
-    """Return new array with all dimensions but time stacked and 
+def land_check(temp, tdim="time", anynans=False):
+    """Return new array with all dimensions but time stacked and
     land points removed.
-    
+
     Parameters
     ----------
     temp: xarray DataArray
@@ -450,7 +497,7 @@ def land_check(temp, tdim='time', anynans=False):
     -------
     ts: xarray DataArray
         Modified timeseries with stacked cell dimension and land points
-        removed  
+        removed
     """
 
     dims = list(temp.dims)
@@ -458,33 +505,33 @@ def land_check(temp, tdim='time', anynans=False):
     # so a 'cell' dimension can still be created
     dims.remove(tdim)
     if len(dims) == 0:
-        temp = temp.expand_dims({'point': [0.]})
-        dims = ['point']
+        temp = temp.expand_dims({"point": [0.0]})
+        dims = ["point"]
     for d in dims:
         if len(temp[d]) == 0:
-            raise XmhwException(f'Dimension {d} has 0 lenght, exiting')
+            raise XmhwException(f"Dimension {d} has 0 lenght, exiting")
     ts = temp.stack(cell=(dims))
     # drop cells that have all/any nan values along time
-    how = 'all'
+    how = "all"
     if anynans:
-        how = 'any'
-    ts = ts.dropna(dim='cell',how=how)
+        how = "any"
+    ts = ts.dropna(dim="cell", how=how)
     # if ts.cell.shape is 0 then all points are land, quit
     if ts.cell.shape == (0,):
-        raise XmhwException('All points of grid are either land or NaN')
+        raise XmhwException("All points of grid are either land or NaN")
     return ts
 
 
 def join_events(events, joined):
     """Update 'event' series values for joined events"""
-    for s,e in joined:
-        events.iloc[int(s):int(e)+1] = s
+    for s, e in joined:
+        events.iloc[int(s):int(e) + 1] = s
     return events
 
 
 def annotate_ds(ds, ds_attrs, kind):
     """Add input timeseries attributes to output dataset.
-    
+
     Units for MHW properties are based on original timeseries units
     if units are not present in the file degree_C is assumed
     Units for dimensions are also from the original file
@@ -495,120 +542,148 @@ def annotate_ds(ds, ds_attrs, kind):
     -------
     """
 
-    github = 'https://github.com/coecms/xmhw'
+    github = "https://github.com/coecms/xmhw"
     try:
-        uts = ds_attrs['temp'].units
-        if any(s in uts for s in ['Celsius','celsius']):
-            uts = 'degree_C'
-    except:
-        uts = 'degree_C'
-    #set coordinates attributes
+        uts = ds_attrs["temp"].units
+        if any(s in uts for s in ["Celsius", "celsius"]):
+            uts = "degree_C"
+    except Exception:
+        uts = "degree_C"
+    # set coordinates attributes
     for c in ds.coords:
-        if c == 'doy':
-            ds[c]['units'] = '1'
-            ds[c]['long_name'] = 'Day of the year'
-        elif c == 'events':
-            ds[c]['units'] = '1'
-            ds[c]['long_name'] = 'MHW event identifier: starting index' 
-        elif c == 'point':
+        if c == "doy":
+            ds[c]["units"] = "1"
+            ds[c]["long_name"] = "Day of the year"
+        elif c == "events":
+            ds[c]["units"] = "1"
+            ds[c]["long_name"] = "MHW event identifier: starting index"
+        elif c == "point":
             continue
         else:
             try:
-                for k,v in ds_attrs[c].items():
+                for k, v in ds_attrs[c].items():
                     ds[c].attrs[k] = v
-            except:
-                XmhwException("Could not retrieve original attributes "
-                    + f"for {c}, add attributes manually to dataset")
+            except Exception:
+                XmhwException(
+                    "Could not retrieve original attributes "
+                    + f"for {c}, add attributes manually to dataset"
+                )
     # set global attributes
-    if kind == 'clim':
+    if kind == "clim":
         # set global attributes
-        ds.attrs['source'] = f"xmhw code: {github}"
+        ds.attrs["source"] = f"xmhw code: {github}"
         # potentially add reference to input data from original dataset
-        ds.attrs['title'] = (f"Seasonal climatology and threshold " +
-             "calculated to detect marine heatwaves following the " +
-             " Hobday et al. (2016) definition")
-        ds.attrs['history'] = (
+        ds.attrs["title"] = (
+            "Seasonal climatology and threshold "
+            + "calculated to detect marine heatwaves following the "
+            + " Hobday et al. (2016) definition"
+        )
+        ds.attrs["history"] = (
             f"{date.today()}: calculated using xmhw code {github}")
-        ds.thresh.attrs['units'] = uts 
-        ds.seas.attrs['units'] = uts 
-        #ds.threshold.lon.attrs['units'] = 'degree_north' 
-       #field.longitude.attrs['units'] = 'degree_east'
+        ds.thresh.attrs["units"] = uts
+        ds.seas.attrs["units"] = uts
+        # ds.threshold.lon.attrs['units'] = 'degree_north'
+    # field.longitude.attrs['units'] = 'degree_east'
     else:
-        ds.event.attrs['units'] = "1" 
-        ds.event.attrs['long_name'] = "MHW event identifier: starting index" 
-        ds.duration.attrs['long_name'] = "MHW duration in number of days" 
-        ds.duration.attrs['units'] = '1' 
-        ds.intensity_max.attrs['long_name'] = (
-            "MHW maximum (peak) intensity relative to seasonal climatology") 
-        ds.intensity_max.attrs['units'] = uts 
-        ds.intensity_mean.attrs['long_name'] = (
-            "MHW mean intensity relative to seasonal climatology") 
-        ds.intensity_mean.attrs['units'] = uts 
-        ds.intensity_var.attrs['long_name'] = (
-            "MHW intensity variability relative to seasonal climatology") 
-        ds.intensity_var.attrs['units'] = uts 
-        ds.intensity_cumulative.attrs['long_name'] = (
-            "MHW cumulative intensity relative to seasonal climatology") 
-        ds.intensity_cumulative.attrs['units'] = f"{uts} day" 
-        ds.severity_max.attrs['long_name'] = (
-            "MHW maximum (peak) severity relative to seasonal climatology") 
-        ds.severity_max.attrs['units'] = uts 
-        ds.severity_mean.attrs['long_name'] = (
-            "MHW mean severity relative to seasonal climatology") 
-        ds.severity_mean.attrs['units'] = uts 
-        ds.severity_var.attrs['long_name'] = (
-            "MHW severity variability relative to seasonal climatology") 
-        ds.severity_var.attrs['units'] = uts 
-        ds.severity_cumulative.attrs['long_name'] = (
-            "MHW cumulative severity relative to seasonal climatology") 
-        ds.severity_cumulative.attrs['units'] = f"{uts} day" 
-        ds.rate_onset.attrs['long_name'] = "MHW onset rate" 
-        ds.rate_onset.attrs['units'] = f"{uts} day-1" 
-        ds.rate_decline.attrs['long_name'] = "MHW decline rate" 
-        ds.rate_decline.attrs['units'] = f"{uts} day-1" 
-        ds.intensity_max_relThresh.attrs['long_name'] = (
-            "MHW maximum (peak) intensity relative to threshold") 
-        ds.intensity_max_relThresh.attrs['units'] = uts 
-        ds.intensity_mean_relThresh.attrs['long_name'] = (
-            "MHW mean intensity relative to threshold") 
-        ds.intensity_mean_relThresh.attrs['units'] = uts 
-        ds.intensity_var_relThresh.attrs['long_name'] = (
-            "MHW intensity variability relative to threshold") 
-        ds.intensity_var_relThresh.attrs['units'] = uts 
-        ds.intensity_cumulative_relThresh.attrs['long_name'] = (
-            "MHW cumulative intensity relative to threshold") 
-        ds.intensity_cumulative_relThresh.attrs['units'] = f"{uts} day" 
-        ds.intensity_max_abs.attrs['long_name'] = (
-            "MHW maximum (peak) intensity absolute magnitude") 
-        ds.intensity_max_abs.attrs['units'] = uts 
-        ds.intensity_mean_abs.attrs['long_name'] = (
-            "MHW mean intensity absolute magnitude") 
-        ds.intensity_mean_abs.attrs['units'] = uts 
-        ds.intensity_var_abs.attrs['long_name'] = (
-            "MHW intensity variability abosulute magnitude")
-        ds.intensity_var_abs.attrs['units'] = uts 
-        ds.intensity_cumulative_abs.attrs['long_name'] = (
-            "MHW cumulative intensity absolute magnitude") 
-        ds.intensity_cumulative_abs.attrs['units'] = f"{uts} day" 
+        ds.event.attrs["units"] = "1"
+        ds.event.attrs["long_name"] = "MHW event identifier: starting index"
+        ds.duration.attrs["long_name"] = "MHW duration in number of days"
+        ds.duration.attrs["units"] = "1"
+        ds.intensity_max.attrs[
+            "long_name"
+        ] = "MHW maximum (peak) intensity relative to seasonal climatology"
+        ds.intensity_max.attrs["units"] = uts
+        ds.intensity_mean.attrs[
+            "long_name"
+        ] = "MHW mean intensity relative to seasonal climatology"
+        ds.intensity_mean.attrs["units"] = uts
+        ds.intensity_var.attrs[
+            "long_name"
+        ] = "MHW intensity variability relative to seasonal climatology"
+        ds.intensity_var.attrs["units"] = uts
+        ds.intensity_cumulative.attrs[
+            "long_name"
+        ] = "MHW cumulative intensity relative to seasonal climatology"
+        ds.intensity_cumulative.attrs["units"] = f"{uts} day"
+        ds.severity_max.attrs[
+            "long_name"
+        ] = "MHW maximum (peak) severity relative to seasonal climatology"
+        ds.severity_max.attrs["units"] = uts
+        ds.severity_mean.attrs[
+            "long_name"
+        ] = "MHW mean severity relative to seasonal climatology"
+        ds.severity_mean.attrs["units"] = uts
+        ds.severity_var.attrs[
+            "long_name"
+        ] = "MHW severity variability relative to seasonal climatology"
+        ds.severity_var.attrs["units"] = uts
+        ds.severity_cumulative.attrs[
+            "long_name"
+        ] = "MHW cumulative severity relative to seasonal climatology"
+        ds.severity_cumulative.attrs["units"] = f"{uts} day"
+        ds.rate_onset.attrs["long_name"] = "MHW onset rate"
+        ds.rate_onset.attrs["units"] = f"{uts} day-1"
+        ds.rate_decline.attrs["long_name"] = "MHW decline rate"
+        ds.rate_decline.attrs["units"] = f"{uts} day-1"
+        ds.intensity_max_relThresh.attrs[
+            "long_name"
+        ] = "MHW maximum (peak) intensity relative to threshold"
+        ds.intensity_max_relThresh.attrs["units"] = uts
+        ds.intensity_mean_relThresh.attrs[
+            "long_name"
+        ] = "MHW mean intensity relative to threshold"
+        ds.intensity_mean_relThresh.attrs["units"] = uts
+        ds.intensity_var_relThresh.attrs[
+            "long_name"
+        ] = "MHW intensity variability relative to threshold"
+        ds.intensity_var_relThresh.attrs["units"] = uts
+        ds.intensity_cumulative_relThresh.attrs[
+            "long_name"
+        ] = "MHW cumulative intensity relative to threshold"
+        ds.intensity_cumulative_relThresh.attrs["units"] = f"{uts} day"
+        ds.intensity_max_abs.attrs[
+            "long_name"
+        ] = "MHW maximum (peak) intensity absolute magnitude"
+        ds.intensity_max_abs.attrs["units"] = uts
+        ds.intensity_mean_abs.attrs[
+            "long_name"
+        ] = "MHW mean intensity absolute magnitude"
+        ds.intensity_mean_abs.attrs["units"] = uts
+        ds.intensity_var_abs.attrs[
+            "long_name"
+        ] = "MHW intensity variability abosulute magnitude"
+        ds.intensity_var_abs.attrs["units"] = uts
+        ds.intensity_cumulative_abs.attrs[
+            "long_name"
+        ] = "MHW cumulative intensity absolute magnitude"
+        ds.intensity_cumulative_abs.attrs["units"] = f"{uts} day"
         # should be treated as flags from CF point of view?
-        ds.category.attrs['long_name'] = ("MHW category based on peak "
-            + "intensity: 1: Moderate, 2: Strong, 3: Severe or 4: Extreme") 
-        ds.duration_moderate.attrs['long_name'] = (
-            "Number of days falling in category Moderate") 
-        ds.duration_moderate.attrs['units'] = "1" 
-        ds.duration_strong.attrs['long_name'] = (
-            "Number of days falling in category Strong") 
-        ds.duration_strong.attrs['units'] = "1" 
-        ds.duration_severe.attrs['long_name'] = (
-            "Number of days falling in category Severe") 
-        ds.duration_severe.attrs['units'] = "1" 
-        ds.duration_extreme.attrs['long_name'] = (
-            "Number of days falling in category Extreme") 
-        ds.duration_extreme.attrs['units'] = "1" 
+        ds.category.attrs["long_name"] = (
+            "MHW category based on peak "
+            + "intensity: 1: Moderate, 2: Strong, 3: Severe or 4: Extreme"
+        )
+        ds.duration_moderate.attrs[
+            "long_name"
+        ] = "Number of days falling in category Moderate"
+        ds.duration_moderate.attrs["units"] = "1"
+        ds.duration_strong.attrs[
+            "long_name"
+        ] = "Number of days falling in category Strong"
+        ds.duration_strong.attrs["units"] = "1"
+        ds.duration_severe.attrs[
+            "long_name"
+        ] = "Number of days falling in category Severe"
+        ds.duration_severe.attrs["units"] = "1"
+        ds.duration_extreme.attrs[
+            "long_name"
+        ] = "Number of days falling in category Extreme"
+        ds.duration_extreme.attrs["units"] = "1"
         # set global attributes
-        ds.attrs['source'] = f"xmhw code: {github}"
-        ds.attrs['title'] = (f"Marine heatwave events identified " +
-            f"applying the Hobday et al. (2016) marine heat wave definition")
-        ds.attrs['history'] = (
+        ds.attrs["source"] = f"xmhw code: {github}"
+        ds.attrs["title"] = (
+            "Marine heatwave events identified "
+            + "applying the Hobday et al. (2016) marine heat wave definition"
+        )
+        ds.attrs["history"] = (
             f"{date.today()}: calculated using xmhw code {github}")
     return ds

@@ -17,8 +17,6 @@
 
 
 import numpy as np
-import dask
-from .exception import XmhwException
 
 
 def mhw_df(df):
@@ -33,7 +31,7 @@ def mhw_df(df):
     -------
     df: pandas Dataframe
         Ready to be passed to mhw_features, with added categories,
-        severity and relative norms  
+        severity and relative norms
     """
 
     # get temp, climatologies values for events only
@@ -43,37 +41,37 @@ def mhw_df(df):
     mhw_thresh = df.thresh.where(ismhw)
 
     # difference ts and seas, needed to calculate onset and decline rates
-    anom = (df.ts - df.seas)
-    df['anom_plus'] = anom.shift(+1)
-    df['anom_minus'] = anom.shift(-1)
+    anom = df.ts - df.seas
+    df["anom_plus"] = anom.shift(+1)
+    df["anom_minus"] = anom.shift(-1)
     # Adding ts, seas, thresh to dataframe so intermediate results and
     # climatologies can be saved together
-    df['time'] = df.index
-    df['seas'] = mhw_seas
-    df['thresh'] = mhw_thresh
+    df["time"] = df.index
+    df["seas"] = mhw_seas
+    df["thresh"] = mhw_thresh
     t_seas = mhw_temp - mhw_seas
     t_thresh = mhw_temp - mhw_thresh
     thresh_seas = mhw_thresh - mhw_seas
-    df['relSeas'] = t_seas
-    df['relThresh'] = t_thresh
-    df['relThreshNorm'] = t_thresh / thresh_seas
+    df["relSeas"] = t_seas
+    df["relThresh"] = t_thresh
+    df["relThreshNorm"] = t_thresh / thresh_seas
     # calculate severity
-    df['severity'] = t_seas / -(thresh_seas)
+    df["severity"] = t_seas / -(thresh_seas)
     # calculate categories
-    df['severity'] = t_seas / -(thresh_seas)
-    df['cats'] = np.floor(1. + df.relThreshNorm)
-    df['duration_moderate'] = df.cats == 1.
-    df['duration_strong'] = df.cats == 2.
-    df['duration_severe'] = df.cats == 3.
-    df['duration_extreme'] = df.cats >= 4.
+    df["severity"] = t_seas / -(thresh_seas)
+    df["cats"] = np.floor(1.0 + df.relThreshNorm)
+    df["duration_moderate"] = df.cats == 1.0
+    df["duration_strong"] = df.cats == 2.0
+    df["duration_severe"] = df.cats == 3.0
+    df["duration_extreme"] = df.cats >= 4.0
     # also needed to calculate onset decline rates
-    df['mabs'] = mhw_temp
+    df["mabs"] = mhw_temp
     return df
 
 
 def mhw_features(dftime, last):
     """Calculate mhw properties, grouping by each event.
-    
+
     Parameters
     ----------
     dftime: pandas Dataframe
@@ -87,18 +85,13 @@ def mhw_features(dftime, last):
         Includes MHW characteristics along time index
     """
 
-    # calculate some of the mhw properties aggreagting by events
+    # calculate some of the mhw properties aggregating by events
     df = agg_df(dftime)
     # calculate the rest of the mhw properties
     df = properties(df, dftime.relThresh, dftime.mabs)
     # calculate onset decline rates
-    df = onset_decline(df, last)    
+    df = onset_decline(df, last)
     return df
-
-
-def unique_dropna(s):
-    """Apply dropna before calling unique to return only non NaN values"""
-    return s.dropna().unique()
 
 
 def agg_df(df):
@@ -118,44 +111,45 @@ def agg_df(df):
     """
 
     # using an aggregation dictionary to avoid apply.
-    dfout = df.groupby('events').agg(
-            event = ('events', 'first'),
-            index_start = ('start', unique_dropna),
-            index_end = ('end', unique_dropna),
-            time_start = ('time', 'first'),
-            time_end = ('time', 'last'),
-            relS_imax = ('relSeas', np.argmax),
-            # time as dataframe index, instead
-            # of the timeseries index 
-            time_peak = ('relSeas', 'idxmax'),
-            # the following are needed for onset_decline
-            # anom_plus is (sst -seas) shifted 1 day ahead 
-            # anom_minus is (sst -seas) shifted 1 day back 
-            relS_first = ('relSeas', 'first'),
-            relS_last = ('relSeas', 'last'),
-            anom_first = ('anom_plus', 'first'),
-            anom_last = ('anom_minus', 'last'),
-            # intensity_max can be used as relSeas(index_peak)
-            # in onset_decline
-            intensity_max = ('relSeas', 'max'),
-            intensity_mean = ('relSeas', 'mean'),
-            intensity_cumulative = ('relSeas', 'sum'),
-            severity_max = ('severity', 'max'),
-            severity_mean = ('severity', 'mean'),
-            severity_cumulative = ('severity', 'sum'),
-            severity_var = ('severity', 'var'),
-            relS_var = ('relSeas', 'var'),
-            relT_var = ('relThresh', 'var'), 
-            intensity_mean_relThresh = ('relThresh', 'mean'),
-            intensity_cumulative_relThresh = ('relThresh', 'sum'),
-            intensity_mean_abs = ('mabs', 'mean'),
-            mabs_var = ('mabs', 'var'), 
-            intensity_cumulative_abs = ('mabs', 'sum'),
-            cats_max = ('cats', 'max'), 
-            duration_moderate = ('duration_moderate', 'sum'),
-            duration_strong = ('duration_strong', 'sum'),
-            duration_severe = ('duration_severe', 'sum'),
-            duration_extreme = ('duration_extreme', 'sum') )
+    dfout = df.groupby("events").agg(
+        event=("events", "first"),
+        index_start=("start", "first"),
+        index_end=("end", "first"),
+        time_start=("time", "first"),
+        time_end=("time", "last"),
+        relS_imax=("relSeas", np.argmax),
+        # time as dataframe index, instead
+        # of the timeseries index
+        time_peak=("relSeas", "idxmax"),
+        # the following are needed for onset_decline
+        # anom_plus is (sst -seas) shifted 1 day ahead
+        # anom_minus is (sst -seas) shifted 1 day back
+        relS_first=("relSeas", "first"),
+        relS_last=("relSeas", "last"),
+        anom_first=("anom_plus", "first"),
+        anom_last=("anom_minus", "last"),
+        # intensity_max can be used as relSeas(index_peak)
+        # in onset_decline
+        intensity_max=("relSeas", "max"),
+        intensity_mean=("relSeas", "mean"),
+        intensity_cumulative=("relSeas", "sum"),
+        severity_max=("severity", "max"),
+        severity_mean=("severity", "mean"),
+        severity_cumulative=("severity", "sum"),
+        severity_var=("severity", "var"),
+        relS_var=("relSeas", "var"),
+        relT_var=("relThresh", "var"),
+        intensity_mean_relThresh=("relThresh", "mean"),
+        intensity_cumulative_relThresh=("relThresh", "sum"),
+        intensity_mean_abs=("mabs", "mean"),
+        mabs_var=("mabs", "var"),
+        intensity_cumulative_abs=("mabs", "sum"),
+        cats_max=("cats", "max"),
+        duration_moderate=("duration_moderate", "sum"),
+        duration_strong=("duration_strong", "sum"),
+        duration_severe=("duration_severe", "sum"),
+        duration_extreme=("duration_extreme", "sum"),
+    )
     return dfout
 
 
@@ -169,37 +163,36 @@ def properties(df, relT, mabs):
         Includes most MHW properties by events
     relT: pandas Series
         Difference between ts and threshold where there is an event
-    mabs: pandas Series 
+    mabs: pandas Series
         Absolute value of temperature along time index
 
     Returns
     -------
     df: pandas Dataframe
-        As input but with more MHW properties added 
+        As input but with more MHW properties added
     """
 
-    df['index_peak'] = df.event + df.relS_imax
-    df['intensity_var'] = np.sqrt(df.relS_var) 
-    df['severity_var'] = np.sqrt(df.severity_var) 
-    df['intensity_max_relThresh'] = relT[df.time_peak].values
-    df['intensity_max_abs'] = mabs[df.time_peak].values
-    df['intensity_var_relThresh'] = np.sqrt(df.relT_var) 
-    df['intensity_var_abs'] = np.sqrt(df.mabs_var) 
-    df['category'] = np.minimum(df.cats_max, 4)
-    df['duration'] = df.index_end - df.index_start + 1
-    df = df.drop(['relS_imax', 'relS_var', 'relT_var', 'cats_max',
-                  'mabs_var'], axis=1)
+    df["index_peak"] = df.event + df.relS_imax
+    df["intensity_var"] = np.sqrt(df.relS_var)
+    df["severity_var"] = np.sqrt(df.severity_var)
+    df["intensity_max_relThresh"] = relT[df.time_peak].values
+    df["intensity_max_abs"] = mabs[df.time_peak].values
+    df["intensity_var_relThresh"] = np.sqrt(df.relT_var)
+    df["intensity_var_abs"] = np.sqrt(df.mabs_var)
+    df["category"] = np.minimum(df.cats_max, 4)
+    df["duration"] = df.index_end - df.index_start + 1
+    df = df.drop(["relS_imax", "relS_var", "relT_var", "cats_max", "mabs_var"],
+                 axis=1)
     return df
 
 
 def get_rate(relSeas_peak, relSeas_edge, period):
-    """ Calculate onset/decline rate of event
-    """
+    """Calculate onset/decline rate of event"""
     return (relSeas_peak - relSeas_edge) / period
 
 
 def get_edge(relS, anom, idx, edge):
-    """Returns the relative start or end of MHWs 
+    """Returns the relative start or end of MHWs
 
     Parameters
     ----------
@@ -207,7 +200,7 @@ def get_edge(relS, anom, idx, edge):
         Difference between ts and seas where there is an MHW event
         Onset -> relS[0],  decline -> relS[-1]
     anom: pandas Series
-        Difference between ts and seas along time axis 
+        Difference between ts and seas along time axis
         Shifted by +1/-1 along time axis for onset/decline
     idx: int
         Edge index is 0 for onset and lst index of ts for decline
@@ -218,8 +211,8 @@ def get_edge(relS, anom, idx, edge):
         Value of onset/decline edge
     """
     x = relS.where(idx == edge, anom)
-    mhw_edge = 0.5*(relS + x)
-    return mhw_edge 
+    mhw_edge = 0.5 * (relS + x)
+    return mhw_edge
 
 
 def get_period(start, end, peak, tsend):
@@ -231,10 +224,10 @@ def get_period(start, end, peak, tsend):
     In any other case period = peak + 0.5
 
     For decline if event ends on last day of timeseries, then:
-       if peak on last day of event, onset period -> 1 day 
+       if peak on last day of event, onset period -> 1 day
        else -> period=(end - start - peak).
     In any other case period = (end - start -peak) + 0.5
-        
+
     Parameters
     ----------
     start: pandas Series
@@ -276,24 +269,22 @@ def onset_decline(df, last):
     Returns
     -------
     df: pandas Dataframe
-        As input but with rates of onset an decline added 
+        As input but with rates of onset an decline added
     """
 
-    # calculate first the onset/decline period and edge 
+    # calculate first the onset/decline period and edge
     rel_index_peak = df.index_peak - df.index_start
-    onset_period, decline_period = get_period(df.index_start,
-                                   df.index_end, rel_index_peak, last)
-    relSeas_start = get_edge(df.relS_first, df.anom_first, 
-                             df.index_start, 0)
-    relSeas_end = get_edge(df.relS_last, df.anom_last, df.index_end,
-                           last)
-    # calculate rates  
-    df['rate_onset'] =  get_rate(df.intensity_max, relSeas_start,
-                                 onset_period)
-    df['rate_decline'] =  get_rate(df.intensity_max, relSeas_end,
-                                 decline_period)
-    df = df.drop(['anom_first', 'anom_last', 'relS_last',
-                  'relS_first'], axis=1) 
+    onset_period, decline_period = get_period(
+        df.index_start, df.index_end, rel_index_peak, last
+    )
+    relSeas_start = get_edge(df.relS_first, df.anom_first, df.index_start, 0)
+    relSeas_end = get_edge(df.relS_last, df.anom_last, df.index_end, last)
+    # calculate rates
+    df["rate_onset"] = get_rate(df.intensity_max, relSeas_start, onset_period)
+    df["rate_decline"] = get_rate(df.intensity_max, relSeas_end,
+                                  decline_period)
+    df = df.drop(["anom_first", "anom_last", "relS_last", "relS_first"],
+                 axis=1)
     return df
 
 
@@ -312,6 +303,6 @@ def flip_cold(ds):
     """
 
     for varname in ds.keys():
-        if 'intensity' in varname and '_var' not in varname:
-            ds[varname] = -1*ds[varname]
+        if "intensity" in varname and "_var" not in varname:
+            ds[varname] = -1 * ds[varname]
     return ds
