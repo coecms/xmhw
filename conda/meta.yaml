@@ -6,7 +6,7 @@ package:
 about:
     home: https://github.com/coecms/xmhw
     license: Apache-2.0
-    license_file: LICENSE-2.0.txt
+    license_file: LICENSE.txt
     summary: "Xarray based Marine HeatWave detection code"
     description: |
       XMHW identifies marine heatwaves from a timseries of 
@@ -18,10 +18,11 @@ about:
 
 requirements:
     host:
-        - python >= 3.7
+        - python >=3.7
         - pip
+        - pbr
     run:
-        - python >= 3.7
+        - python >=3.7
         - pandas
         - xarray
         - numpy
@@ -31,14 +32,16 @@ source:
     url:  https://github.com/coecms/xmhw/archive/refs/tags/{{version}}.tar.gz 
 
 build:
+    script: "{{ PYTHON }} -m pip install . --no-deps --ignore-installed"
+    noarch: python
     number: {{ GIT_DESCRIBE_NUMBER }}
-    script: python setup.py install --single-version-externally-managed --record=record.txt
 
 test:
     source_files:
         - setup.cfg
         - test
     requires:
+        - netcdf4
         - pytest
         - coverage
         - numpy
@@ -47,6 +50,8 @@ test:
         - dask
     imports:
         - xmhw
+    script_env:
+        - TEST_OUTPUT
     commands:
         - COVERAGE_FILE=${TEST_OUTPUT:-.}/coverage coverage run --source xmhw -m pytest ./test
 

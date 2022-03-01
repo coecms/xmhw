@@ -1,2 +1,0 @@
-conda config --add channels <username> 
-conda install mypackage
