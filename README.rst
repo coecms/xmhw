@@ -1,11 +1,11 @@
 =============================
- `xmhw <https://xmhw.readthedocs.io/en/stable>`_
+ `xmhw <https://xmhw.readthedocs.io/en/latest>`_
 =============================
 
 XMHW - Xarray based Marine HeatWave code -  
 
 .. image:: https://readthedocs.org/projects/xmhw/badge/?version=latest
-  :target: https://xmhw.readthedocs.io/en/stable/
+  :target: https://xmhw.readthedocs.io/en/latest/
 .. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.6270280.svg
    :target: https://doi.org/10.5281/zenodo.6270280
 
