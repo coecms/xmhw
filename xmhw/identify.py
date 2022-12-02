@@ -510,7 +510,9 @@ def land_check(temp, tdim="time", anynans=False):
     for d in dims:
         if len(temp[d]) == 0:
             raise XmhwException(f"Dimension {d} has 0 lenght, exiting")
-    ts = temp.stack(cell=(dims))
+    # removing multi-index creation, as this was disappearing during percentile and mean operation anyway,
+    # and potentially slows down calculation
+    ts = temp.stack(cell=(dims), create_index=False)
     # drop cells that have all/any nan values along time
     how = "all"
     if anynans:

@@ -172,6 +172,8 @@ def test_define_events(define_data, mhw_data, inter_data):
     )
     results = res.compute()
     xrtest.assert_allclose(results[0], mhwds)
+    print(results[1])
+    print(interds)
     xrtest.assert_allclose(results[1], interds)
 
     # test define events return one dataset only if intemediate is False, as default

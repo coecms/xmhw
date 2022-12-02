@@ -169,13 +169,20 @@ def threshold(
 
     # Concatenate results and save as dataset
     ds = xr.Dataset()
-    thresh_results = [r[0] for r in results[0]]
-    ds["thresh"] = xr.concat(thresh_results, dim=ts.cell)
+    #thresh_results = [r[0] for r in results[0]]
+    # apply temporary fix suggested by @bjnmr issue #49
+    # as newver version of xarray are removing coords when calculating quantile but not for mean
+    # as I removed the multiindex I'm passing directly r[1].coords and not r[1]['cell'].coords 
+    # this causes issues when trying to concatenate
+    thresh_results = [r[0].assign_coords(r[1].coords) for r in results[0]]
+    ds["thresh"] = xr.concat(thresh_results, dim='cell')
     ds.thresh.name = "threshold"
     seas_results = [r[1] for r in results[0]]
-    ds["seas"] = xr.concat(seas_results, dim=ts.cell)
+    ds["seas"] = xr.concat(seas_results, dim='cell')
     ds.seas.name = "seasonal"
-    ds = ds.unstack("cell")
+    dims = [k for k in ts.cell.coords.keys()]
+    ds = ds.set_xindex(dims)
+    ds = ds.unstack(dim='cell')
 
     # add previously saved attributes to ds
     ds = annotate_ds(ds, ds_attrs, "clim")
