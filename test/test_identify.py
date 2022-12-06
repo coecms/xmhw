@@ -161,9 +161,9 @@ def test_define_events(define_data, mhw_data, inter_data):
     mhwds = mhw_data
     interds = inter_data
     res = define_events(
-        ts.isel(cell=0),
-        th.isel(cell=0),
-        se.isel(cell=0),
+        ts,
+        th,
+        se,
         idxarr,
         5,
         True,
@@ -176,9 +176,9 @@ def test_define_events(define_data, mhw_data, inter_data):
 
     # test define events return one dataset only if intemediate is False, as default
     res = define_events(
-        ts.isel(cell=0),
-        th.isel(cell=0),
-        se.isel(cell=0),
+        ts,
+        th,
+        se,
         idxarr,
         5,
         True,

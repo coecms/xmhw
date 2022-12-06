@@ -240,10 +240,13 @@ def check_coordinates(dstime):
     # find name of time dimension
     # If there is already a stacked dimension skip land_check
     check = True
-    ds_coords = list(dstime.coords)
+    # now that we use a stacked array without crearting an index 
+    # the stacked coord is a dimension without coordinates
+    # and its type is int64 not anymore object
+    ds_coords = list(dstime.dims)
     for x in ds_coords:
         dtype = str(dstime[x].dtype)
-        if dtype == "object":
+        if dtype == "int64":
             stack_coord = x
             check = False
         elif "datetime" in dtype:
