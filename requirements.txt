@@ -1,7 +1,7 @@
 # Add general dependencies here
 # Optional dependencies e.g. [dev] are added in `setup.cfg`
 # temporarily pinning xarray as latest version (22.06.0) has a bug with reindex
-xarray >= 0.16.0, <= 2022.03.0
+xarray >= 0.16.0
 pandas
 numpy
 dask
