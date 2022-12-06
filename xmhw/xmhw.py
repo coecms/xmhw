@@ -345,7 +345,7 @@ def detect(
             + " be smaller than event minimum duration"
         )
     # if time dimension different from time, rename it
-    temp = temp.rename({tdim: "time"})
+    #temp = temp.rename({tdim: "time"})
     # save original attributes in a dictionary to assign to final dataset
     ds_attrs = {}
     ds_attrs["ts"] = temp.attrs
@@ -355,7 +355,7 @@ def detect(
 
     # Returns an array stacked on all dimensions excluded time, doy
     # Land cells are removed and new dimensions are (time,cell)
-    ts = land_check(temp, anynans=anynans)
+    ts = land_check(temp, tdim=tdim, anynans=anynans)
     del temp
     th = land_check(th, tdim="doy", anynans=anynans)
     se = land_check(se, tdim="doy", anynans=anynans)
@@ -373,7 +373,7 @@ def detect(
 
     # Build a pandas series with the positional indexes as values
     # [0,1,2,3,4,5,6,7,8,9,10,..]
-    idxarr = pd.Series(data=np.arange(len(ts.time)), index=ts.time.values)
+    idxarr = pd.Series(data=np.arange(len(ts[tdim])), index=ts[tdim].values)
 
     # Loop over each cell to detect MHW events, define_events()
     # is delayed, so loop is automatically run in parallel
@@ -389,18 +389,25 @@ def detect(
                 joinGaps,
                 maxGap,
                 intermediate,
+                tdim,
             )
         )
     results = dask.compute(mhwls)
 
     # Concatenate results and save as dataset
-    mhw_results = [r[0] for r in results[0]]
-    mhw = xr.concat(mhw_results, dim=ts.cell)
-    mhw = mhw.unstack("cell")
+    # re-assign dimensions previously used to stack arrays
+    dims = list(ts.cell.coords)
+    mhw_results = [r[0].assign_coords({d: r[0][d][0].values for d in dims}) for r in results[0]]
+    mhw = xr.concat(mhw_results, dim='cell')
+    # looks like I need to remove index (i.e. time) as a dimension first
+    mhw = mhw.set_xindex(dims)
+    mhw = mhw.unstack(dim='cell')
     if intermediate:
-        inter_results = [r[1] for r in results[0]]
-        mhw_inter = xr.concat(inter_results, dim=ts.cell).unstack("cell")
-        mhw_inter = mhw_inter.rename({"index": "time"})
+        inter_results = [r[1].assign_coords({d: r[1][d][0].values for d in dims}) for r in results[0]]
+        mhw_inter = xr.concat(inter_results, dim='cell')
+        mhw_inter = mhw_inter.set_xindex(dims)
+        mhw_inter = mhw_inter.unstack('cell')
+        mhw_inter = mhw_inter.rename({'index': 'time'})
         mhw_inter = mhw_inter.squeeze(drop=True)
     # if point dimension was added in land_check remove
     mhw = mhw.squeeze(drop=True)

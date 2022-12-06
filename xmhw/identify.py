@@ -328,7 +328,7 @@ def join_gaps(st, end, events, maxGap):
 
 @dask.delayed(nout=2)
 def define_events(ts, th, se, idxarr, minDuration, joinGaps, maxGap,
-                  intermediate):
+                  intermediate, tdim="time"):
     """Finds all MHW events of duration >= minDuration and calculate
     their properties.
 
@@ -373,10 +373,20 @@ def define_events(ts, th, se, idxarr, minDuration, joinGaps, maxGap,
     bthresh = ts > thresh
     ds = xr.Dataset({"ts": ts, "seas": seas, "thresh": thresh,
                      "bthresh": bthresh})
-
     # Convert xarray dataset to pandas dataframe, as groupby operations
     # are faster in pandas
     df = ds.to_dataframe()
+    dims = list(ds.coords)
+    # create a list of potential fields to remove from dims now and df later
+    fields_toremove = ["doy",
+                "time",
+                "start",
+                "end",
+                "anom_plus",
+                "anom_minus",
+                "quantile",
+                    ]
+    [dims.remove(x) for x in fields_toremove if x in dims]
     del ds
 
     # detect events
@@ -387,25 +397,17 @@ def define_events(ts, th, se, idxarr, minDuration, joinGaps, maxGap,
     del dfev
 
     # Calculate mhw properties, for each event using groupby
-    dfmhw = mhw_features(df, len(idxarr) - 1)
+    dfmhw = mhw_features(df, len(idxarr) - 1, tdim, dims)
 
     # Convert back to xarray dataset
     mhw = xr.Dataset.from_dataframe(dfmhw, sparse=False)
     del dfmhw
     mhw_inter = None
+    current_columns = df.columns.to_list()
+    toremove = [x for x in fields_toremove if x in current_columns] 
+
     if intermediate:
-        df = df.drop(
-            columns=[
-                "doy",
-                "cell",
-                "time",
-                "start",
-                "end",
-                "anom_plus",
-                "anom_minus",
-                "quantile",
-            ]
-        )
+        df = df.drop(columns=toremove)
         mhw_inter = xr.Dataset.from_dataframe(df, sparse=False)
     del df
     return mhw, mhw_inter
@@ -512,7 +514,8 @@ def land_check(temp, tdim="time", anynans=False):
             raise XmhwException(f"Dimension {d} has 0 lenght, exiting")
     # removing multi-index creation, as this was disappearing during percentile and mean operation anyway,
     # and potentially slows down calculation
-    ts = temp.stack(cell=(dims), create_index=False)
+    # adding sorted to be consistent if applying functipn to different arrays with same dimensions
+    ts = temp.stack(cell=(sorted(dims)), create_index=False)
     # drop cells that have all/any nan values along time
     how = "all"
     if anynans:
