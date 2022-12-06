@@ -399,7 +399,6 @@ def detect(
     dims = list(ts.cell.coords)
     mhw_results = [r[0].assign_coords({d: r[0][d][0].values for d in dims}) for r in results[0]]
     mhw = xr.concat(mhw_results, dim='cell')
-    # looks like I need to remove index (i.e. time) as a dimension first
     mhw = mhw.set_xindex(dims)
     mhw = mhw.unstack(dim='cell')
     if intermediate:
