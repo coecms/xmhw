@@ -1,4 +1,4 @@
-{% set version = "0.9.1" %}
+{% set version = "1.0.0" %}
 package:
     name: xmhw 
     version: {{ version }}
@@ -29,7 +29,8 @@ requirements:
         - dask 
 
 source:
-    url:  https://github.com/coecms/xmhw/archive/refs/tags/{{version}}.tar.gz 
+    git_url:  https://github.com/coecms/xmhw.git 
+    git_rev: 1.0.0
 
 build:
     script: "{{ PYTHON }} -m pip install . --no-deps --ignore-installed"
