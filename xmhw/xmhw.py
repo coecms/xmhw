@@ -37,17 +37,18 @@ from .exception import XmhwException
 
 def threshold(
     temp,
-    tdim="time",
-    climatologyPeriod=[None, None],
-    pctile=90,
-    windowHalfWidth=5,
-    smoothPercentile=True,
-    smoothPercentileWidth=31,
-    maxPadLength=None,
-    coldSpells=False,
-    tstep=False,
-    anynans=False,
-    skipna=False,
+    tdim = "time",
+    climatologyPeriod = [None, None],
+    pctile = 90,
+    windowHalfWidth = 5,
+    smoothPercentile = True,
+    smoothPercentileWidth = 31,
+    maxPadLength = None,
+    coldSpells = False,
+    tstep = False,
+    anynans = False,
+    skipna = False,
+    point = False,
 ):
     """Calculate threshold and mean climatology (day-of-year).
 
@@ -90,6 +91,9 @@ def threshold(
     skipna: bool, optional
         If True percentile and mean function will use skipna=True.
         Using skipna option is much slower (default is False)
+    point: bool, optional
+        Set True if timeseries is a point, i.e. it has only time dimension,
+        it will skip grid parallelisation (default is False)
 
     Returns
     -------
@@ -125,7 +129,10 @@ def threshold(
         ds_attrs[c] = temp[c].attrs
     # Returns an array stacked on all dimensions excluded time
     # Land cells are removed and new dimensions are (time,cell)
-    ts = land_check(temp, tdim=tdim, anynans=anynans)
+    if point:
+        ts = temp
+    else:
+        ts = land_check(temp, tdim=tdim, anynans=anynans)
 
     # check if the calendar attribute is present in time dimension
     # if not try to guess length of year
@@ -149,13 +156,15 @@ def threshold(
     if maxPadLength:
         ts = ts.interpolate_na(dim=tdim, max_gap=maxPadLength)
 
-    # Loop over each cell to calculate climatologies, main functions
-    # are delayed, so loop is automatically run in parallel
+    # Open list for partial results and dataset to save calculated results
     climls = []
-    for c in ts.cell:
+    ds = xr.Dataset()
+
+    # if timeseries is a single point we skipped grid operations
+    if point:
         climls.append(
             calc_clim(
-                ts.sel(cell=c),
+                ts,
                 tdim,
                 pctile,
                 windowHalfWidth,
@@ -163,34 +172,53 @@ def threshold(
                 smoothPercentileWidth,
                 tstep,
                 skipna,
+                )
             )
-        )
+
+    else:
+    # Loop over each cell to calculate climatologies, main functions
+    # are delayed, so loop is automatically run in parallel
+        for c in ts.cell:
+            climls.append(
+                calc_clim(
+                    ts.sel(cell=c),
+                    tdim,
+                    pctile,
+                    windowHalfWidth,
+                    smoothPercentile,
+                    smoothPercentileWidth,
+                    tstep,
+                    skipna,
+                )
+            )
     results = dask.compute(climls)
 
-    # Concatenate results and save as dataset
-    ds = xr.Dataset()
     #thresh_results = [r[0] for r in results[0]]
     # apply temporary fix suggested by @bjnmr issue #49
     # as newver version of xarray are removing coords when calculating quantile but not for mean
     # as I removed the multiindex I'm passing directly r[1].coords and not r[1]['cell'].coords 
     # this causes issues when trying to concatenate
     thresh_results = [r[0].assign_coords(r[1].coords) for r in results[0]]
-    ds["thresh"] = xr.concat(thresh_results, dim='cell')
-    ds.thresh.name = "threshold"
     seas_results = [r[1] for r in results[0]]
-    ds["seas"] = xr.concat(seas_results, dim='cell')
+    if point:
+        ds["thresh"] = thresh_results[0]
+        ds["seas"] = seas_results[0]
+    else:
+        ds["thresh"] = xr.concat(thresh_results, dim='cell')
+        ds["seas"] = xr.concat(seas_results, dim='cell')
+        dims = [k for k in ts.cell.coords.keys()]
+        ds = ds.set_xindex(dims)
+        ds = ds.unstack(dim='cell')
+    ds.thresh.name = "threshold"
     ds.seas.name = "seasonal"
-    dims = [k for k in ts.cell.coords.keys()]
-    ds = ds.set_xindex(dims)
-    ds = ds.unstack(dim='cell')
 
     # add previously saved attributes to ds
     ds = annotate_ds(ds, ds_attrs, "clim")
     # add all parameters used to global attributes
-    dum = [ts[0, 0][tdim].dt.year.values, ts[-1, 0][tdim].dt.year.values]
+    dum = [ts[tdim][0].dt.year.values, ts[tdim][-1].dt.year.values]
     params = f"""Threshold calculated using:
     {pctile} percentile;
-    climatology period is {dum[0]}-{dum[0]}';
+    climatology period is {dum[0]}-{dum[1]}';
     window half width used for percentile is {windowHalfWidth}"""
     if skipna:
         params = (
@@ -280,15 +308,16 @@ def detect(
     temp,
     th,
     se,
-    tdim="time",
-    minDuration=5,
-    joinGaps=True,
-    maxGap=2,
-    maxPadLength=None,
-    coldSpells=False,
-    intermediate=False,
-    anynans=False,
-    tstep=False,
+    tdim = "time",
+    minDuration = 5,
+    joinGaps = True,
+    maxGap = 2,
+    maxPadLength = None,
+    coldSpells = False,
+    intermediate = False,
+    anynans = False,
+    tstep = False,
+    point = False,
 ):
     """Applies the Hobday et al. (2016) marine heat wave definition to
     a temperature timeseries. Returns properties of all detected MHWs.
@@ -328,6 +357,9 @@ def detect(
         If True the timeseries timestep is used as base for 'doy' unit
         To use with any but 365/366 days year daily files
         (default is False)
+    point: bool, optional
+        set True if timeseries is a point, i.e. it has only time dimension,
+        it will skip grid parallelisation (default is False)
 
     Returns
     -------
@@ -355,10 +387,13 @@ def detect(
 
     # Returns an array stacked on all dimensions excluded time, doy
     # Land cells are removed and new dimensions are (time,cell)
-    ts = land_check(temp, tdim=tdim, anynans=anynans)
-    del temp
-    th = land_check(th, tdim="doy", anynans=anynans)
-    se = land_check(se, tdim="doy", anynans=anynans)
+    if point:
+        ts = temp
+    else:
+        ts = land_check(temp, tdim=tdim, anynans=anynans)
+        del temp
+        th = land_check(th, tdim="doy", anynans=anynans)
+        se = land_check(se, tdim="doy", anynans=anynans)
     # assign doy
     ts = add_doy(ts, tdim=tdim, keep_tstep=tstep)
 
@@ -375,15 +410,16 @@ def detect(
     # [0,1,2,3,4,5,6,7,8,9,10,..]
     idxarr = pd.Series(data=np.arange(len(ts[tdim])), index=ts[tdim].values)
 
-    # Loop over each cell to detect MHW events, define_events()
-    # is delayed, so loop is automatically run in parallel
+    # Open list for partial results
     mhwls = []
-    for c in ts.cell:
+
+    # if timeseries is a single point we skipped grid operations
+    if point:
         mhwls.append(
             define_events(
-                ts.sel(cell=c),
-                th.sel(cell=c),
-                se.sel(cell=c),
+                ts,
+                th,
+                se,
                 idxarr,
                 minDuration,
                 joinGaps,
@@ -392,24 +428,48 @@ def detect(
                 tdim,
             )
         )
+    else:
+        # Loop over each cell to detect MHW events, define_events()
+        # is delayed, so loop is automatically run in parallel
+        for c in ts.cell:
+            mhwls.append(
+                define_events(
+                    ts.sel(cell=c),
+                    th.sel(cell=c),
+                    se.sel(cell=c),
+                    idxarr,
+                    minDuration,
+                    joinGaps,
+                    maxGap,
+                    intermediate,
+                    tdim,
+                )
+            )
     results = dask.compute(mhwls)
 
     # Concatenate results and save as dataset
     # re-assign dimensions previously used to stack arrays
-    dims = list(ts.cell.coords)
-    mhw_results = [r[0].assign_coords({d: r[0][d][0].values for d in dims}) for r in results[0]]
-    mhw = xr.concat(mhw_results, dim='cell')
-    mhw = mhw.set_xindex(dims)
-    mhw = mhw.unstack(dim='cell')
-    if intermediate:
-        inter_results = [r[1].assign_coords({d: r[1][d][0].values for d in dims}) for r in results[0]]
-        mhw_inter = xr.concat(inter_results, dim='cell')
-        mhw_inter = mhw_inter.set_xindex(dims)
-        mhw_inter = mhw_inter.unstack('cell')
-        mhw_inter = mhw_inter.rename({'index': 'time'})
-        mhw_inter = mhw_inter.squeeze(drop=True)
-    # if point dimension was added in land_check remove
-    mhw = mhw.squeeze(drop=True)
+    if point:
+        mhw_results = [r[0] for r in results[0]]
+        mhw = mhw_results[0]
+        if intermediate:
+            inter_results = [r[1] for r in results[0]]
+            mhw_inter = inter_results[0]
+    else:
+        dims = list(ts.cell.coords)
+        mhw_results = [r[0].assign_coords({d: r[0][d][0].values for d in dims})
+                       for r in results[0]]
+        mhw = xr.concat(mhw_results, dim='cell')
+        mhw = mhw.set_xindex(dims)
+        mhw = mhw.unstack(dim='cell')
+        if intermediate:
+            inter_results = [r[1].assign_coords({d: r[1][d][0].values for d in dims})
+                             for r in results[0]]
+            mhw_inter = xr.concat(inter_results, dim='cell')
+            mhw_inter = mhw_inter.set_xindex(dims)
+            mhw_inter = mhw_inter.unstack('cell')
+            mhw_inter = mhw_inter.rename({'index': 'time'})
+            mhw_inter = mhw_inter.squeeze(drop=True)
 
     # Flip climatology and intensities in case of cold spell detection
     if coldSpells:

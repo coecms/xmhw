@@ -32,6 +32,7 @@ def block_average(
     mtime="time_start",
     removeMissing=False,
     split=False,
+    point=False,
 ):
     """Calculate statistics like averages, mean and maximum on blocks of years.
 
@@ -65,6 +66,9 @@ def block_average(
         (default is False)
     split: bool, optional
         (default is False)
+    point: bool, optional
+        Set True if timeseries is a point, i.e. it has only time dimension,
+        it will skip grid parallelisation (default is False)
 
     Returns
     -------
@@ -97,7 +101,7 @@ def block_average(
     # is already present, then we do not need clims
     if dstime is not None:
         dstime, sw_cats, sw_temp = check_variables(dstime)
-        dstime, stack_coord = check_coordinates(dstime)
+        dstime, stack_coord = check_coordinates(dstime, point)
         period = [
             dstime.time.dt.year[0].values,
             dstime.time.dt.year[-1].values,
@@ -130,14 +134,20 @@ def block_average(
 
     # calculate with aggregation function
     blockls = []
-    # remove land and stack on cell
-    mhw = land_check(mhw, tdim="events")
     # this defines years array to use to groupby arrays
-    tgroup = mhw[mtime].isel(cell=0).dt.year
-    for c in mhw.cell:
-        blockls.append(call_groupby(mhw.sel(cell=c), tgroup, bins))
+    tgroup = mhw[mtime].dt.year
+    if point:
+        blockls.append(call_groupby(mhw, tgroup, bins))
+    else:
+        # remove land and stack on cell
+        mhw = land_check(mhw, tdim="events")
+        for c in mhw.cell:
+            blockls.append(call_groupby(mhw.sel(cell=c), tgroup, bins))
     results = dask.compute(blockls)
-    block = xr.concat(results[0], dim=mhw.cell).unstack("cell")
+    if point:
+        block = blockls[0]
+    else:
+        block = xr.concat(results[0], dim=mhw.cell).unstack("cell")
 
     # if we have ts and/or climatologies we add more stats along time axis
     if sw_temp:
@@ -149,15 +159,24 @@ def block_average(
             mode = "cats"
         else:
             mode = "ts"
-        tgroup = dstime.isel({stack_coord: 0}).time.dt.year
+        #tgroup = dstime.isel({stack_coord: 0}).time.dt.year
+        tgroup = dstime.time.dt.year
         statsls = []
-        for c in dstime[stack_coord]:
-            cell_stats = call_groupby(
-                dstime.sel({stack_coord: c}), tgroup, bins, mode=mode
-            )
-            statsls.append(cell_stats)
-            results = dask.compute(statsls)
-        tstats = xr.concat(results[0], dim=dstime[stack_coord])
+        if point:
+            statsls.append( call_groupby(
+                    dstime.sel({stack_coord: c}), tgroup, bins, mode=mode)
+                )
+        else:
+            for c in dstime[stack_coord]:
+                cell_stats = call_groupby(
+                    dstime.sel({stack_coord: c}), tgroup, bins, mode=mode
+                )
+                statsls.append(cell_stats)
+        results = dask.compute(statsls)
+        if point:
+            tstast = results[0][0]
+        else:
+            tstats = xr.concat(results[0], dim=dstime[stack_coord])
         if stack_coord == "cell":
             tstats = tstats.unstack(stack_coord)
         block = xr.merge([block, tstats])
@@ -220,7 +239,7 @@ def check_variables(dstime):
     return dstime, sw_cats, sw_temp
 
 
-def check_coordinates(dstime):
+def check_coordinates(dstime, point):
     """Check if coordinates are stacked on cell dimension.
 
     Parameters
@@ -228,6 +247,10 @@ def check_coordinates(dstime):
     dstime: xarray Dataset
          Based on intermediate dataset returned by detect(), includes
          original ts and climatologies (optional) along 'time' dimension
+        point: bool, optional
+    Set True if timeseries is a point, i.e. it has only time dimension,
+        it will skip grid parallelisation
+
 
     Returns
     -------
@@ -252,6 +275,9 @@ def check_coordinates(dstime):
         elif "datetime" in dtype:
             tdim = x
             print(f"Assuming {tdim} is time dimension")
+    if point:
+        stack_coord = None
+        check = False
     if check:
         dstime = land_check(dstime, tdim=tdim)
         stack_coord = "cell"

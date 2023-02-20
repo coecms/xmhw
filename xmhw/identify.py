@@ -506,9 +506,12 @@ def land_check(temp, tdim="time", anynans=False):
     # Add an extra fake dimensions if array 1-dimensional
     # so a 'cell' dimension can still be created
     dims.remove(tdim)
+    # treating single-point timeseries separately 
     if len(dims) == 0:
-        temp = temp.expand_dims({"point": [0.0]})
-        dims = ["point"]
+        raise XmhwException(f"Series has only time dimension use point=True option, exiting")
+        
+    #    temp = temp.expand_dims({"point": [0.0]})
+    #    dims = ["point"]
     for d in dims:
         if len(temp[d]) == 0:
             raise XmhwException(f"Dimension {d} has 0 lenght, exiting")
