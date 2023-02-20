@@ -48,7 +48,6 @@ def threshold(
     tstep = False,
     anynans = False,
     skipna = False,
-    point = False,
 ):
     """Calculate threshold and mean climatology (day-of-year).
 
@@ -91,9 +90,6 @@ def threshold(
     skipna: bool, optional
         If True percentile and mean function will use skipna=True.
         Using skipna option is much slower (default is False)
-    point: bool, optional
-        Set True if timeseries is a point, i.e. it has only time dimension,
-        it will skip grid parallelisation (default is False)
 
     Returns
     -------
@@ -121,6 +117,11 @@ def threshold(
             )
         }
         temp = temp.sel(**tslice)
+    # Check if there is only one dimension (assumed as time)
+    # then skip all multidimensional operations
+    dims = list(temp.dims)
+    if len(dims) == 1:
+        point = True
     # Save original attributes in dictionary to assign to final dataset
     ds_attrs = {}
     ds_attrs["ts"] = temp.attrs
@@ -317,7 +318,6 @@ def detect(
     intermediate = False,
     anynans = False,
     tstep = False,
-    point = False,
 ):
     """Applies the Hobday et al. (2016) marine heat wave definition to
     a temperature timeseries. Returns properties of all detected MHWs.
@@ -357,9 +357,6 @@ def detect(
         If True the timeseries timestep is used as base for 'doy' unit
         To use with any but 365/366 days year daily files
         (default is False)
-    point: bool, optional
-        set True if timeseries is a point, i.e. it has only time dimension,
-        it will skip grid parallelisation (default is False)
 
     Returns
     -------
@@ -376,6 +373,11 @@ def detect(
             "Maximum gap between mhw events should"
             + " be smaller than event minimum duration"
         )
+    # Check if there is only one dimension (assumed as time)
+    # then skip all multidimensional operations
+    dims = list(temp.dims)
+    if len(dims) == 1:
+        point = True
     # if time dimension different from time, rename it
     #temp = temp.rename({tdim: "time"})
     # save original attributes in a dictionary to assign to final dataset
