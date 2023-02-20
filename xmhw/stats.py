@@ -99,7 +99,7 @@ def block_average(
         dstime, sw_cats, sw_temp = check_variables(dstime)
         dstime, stack_coord = check_coordinates(dstime)
         if stack_coord is None:
-            point = true
+            point = True
         period = [
             dstime.time.dt.year[0].values,
             dstime.time.dt.year[-1].values,
