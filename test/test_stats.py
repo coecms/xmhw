@@ -77,9 +77,9 @@ def test_check_variables(inter_data):
 def test_check_coordinates(inter_data):
     # with introduction of single point timeseries skip this particular test doesn't work as it was
     #inter_stack = land_check(inter_data, tdim="index")
-    outds, coord = check_coordinates(inter_data, True)
+    outds, coord = check_coordinates(inter_data)
     #xrtest.assert_equal(inter_stack, outds)
-    assert coord == None
+    assert coord == 'point' 
     #stacked = inter_stack.rename({"cell": "other"})
     #outds, coord = check_coordinates(stacked)
     #xrtest.assert_equal(stacked, outds)

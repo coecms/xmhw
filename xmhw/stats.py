@@ -32,7 +32,6 @@ def block_average(
     mtime="time_start",
     removeMissing=False,
     split=False,
-    point=False,
 ):
     """Calculate statistics like averages, mean and maximum on blocks of years.
 
@@ -66,9 +65,6 @@ def block_average(
         (default is False)
     split: bool, optional
         (default is False)
-    point: bool, optional
-        Set True if timeseries is a point, i.e. it has only time dimension,
-        it will skip grid parallelisation (default is False)
 
     Returns
     -------
@@ -101,7 +97,9 @@ def block_average(
     # is already present, then we do not need clims
     if dstime is not None:
         dstime, sw_cats, sw_temp = check_variables(dstime)
-        dstime, stack_coord = check_coordinates(dstime, point)
+        dstime, stack_coord = check_coordinates(dstime)
+        if stack_coord is None:
+            point = True
         period = [
             dstime.time.dt.year[0].values,
             dstime.time.dt.year[-1].values,
@@ -136,7 +134,7 @@ def block_average(
     blockls = []
     # this defines years array to use to groupby arrays
     tgroup = mhw[mtime].dt.year
-    if point:
+    if stack_coord == 'point':
         blockls.append(call_groupby(mhw, tgroup, bins))
     else:
         # remove land and stack on cell
@@ -144,7 +142,7 @@ def block_average(
         for c in mhw.cell:
             blockls.append(call_groupby(mhw.sel(cell=c), tgroup, bins))
     results = dask.compute(blockls)
-    if point:
+    if stack_coord == 'point':
         block = blockls[0]
     else:
         block = xr.concat(results[0], dim=mhw.cell).unstack("cell")
@@ -162,7 +160,7 @@ def block_average(
         #tgroup = dstime.isel({stack_coord: 0}).time.dt.year
         tgroup = dstime.time.dt.year
         statsls = []
-        if point:
+        if stack_coord == 'point':
             statsls.append( call_groupby(
                     dstime.sel({stack_coord: c}), tgroup, bins, mode=mode)
                 )
@@ -173,7 +171,7 @@ def block_average(
                 )
                 statsls.append(cell_stats)
         results = dask.compute(statsls)
-        if point:
+        if stack_coord == 'point':
             tstast = results[0][0]
         else:
             tstats = xr.concat(results[0], dim=dstime[stack_coord])
@@ -239,7 +237,7 @@ def check_variables(dstime):
     return dstime, sw_cats, sw_temp
 
 
-def check_coordinates(dstime, point):
+def check_coordinates(dstime):
     """Check if coordinates are stacked on cell dimension.
 
     Parameters
@@ -247,9 +245,6 @@ def check_coordinates(dstime, point):
     dstime: xarray Dataset
          Based on intermediate dataset returned by detect(), includes
          original ts and climatologies (optional) along 'time' dimension
-        point: bool, optional
-    Set True if timeseries is a point, i.e. it has only time dimension,
-        it will skip grid parallelisation
 
 
     Returns
@@ -263,10 +258,14 @@ def check_coordinates(dstime, point):
     # find name of time dimension
     # If there is already a stacked dimension skip land_check
     check = True
-    # now that we use a stacked array without crearting an index 
+    # now that we use a stacked array without creating an index 
     # the stacked coord is a dimension without coordinates
     # and its type is int64 not anymore object
     ds_coords = list(dstime.dims)
+    # if only 1 dimension assumes is time and set stack_coords to point
+    if len(ds_coords) == 1:
+        stack_coord = 'point'
+        check = False
     for x in ds_coords:
         dtype = str(dstime[x].dtype)
         if dtype == "int64":
@@ -275,9 +274,6 @@ def check_coordinates(dstime, point):
         elif "datetime" in dtype:
             tdim = x
             print(f"Assuming {tdim} is time dimension")
-    if point:
-        stack_coord = None
-        check = False
     if check:
         dstime = land_check(dstime, tdim=tdim)
         stack_coord = "cell"
