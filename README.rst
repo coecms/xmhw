@@ -6,8 +6,8 @@ XMHW - Xarray based Marine HeatWave code -
 
 .. image:: https://readthedocs.org/projects/xmhw/badge/?version=latest
   :target: https://xmhw.readthedocs.io/en/latest/
-.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.6270280.svg
-   :target: https://doi.org/10.5281/zenodo.6270280
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.7662469.svg
+   :target: https://doi.org/10.5281/zenodo.7662469
 
 .. content-marker-for-sphinx
 
@@ -43,9 +43,17 @@ Install
 Use
 ---
 Some examples of how to use the functions and explanations of how the functions work are shown in the readthedocs documentation linked above and the `xmhw_demo.ipynb notebook <https://github.com/coecms/xmhw/blob/master/docs/xmhw_demo.ipynb>_` in the docs folder.
+----------------------
+Latest version v 0.9.2
+----------------------
+
+Main updates:
+    * Updated coordinates handling following recent updates of xarray
+
+    * Added a separate workflow if only a single point time-series is passed as input, the functions are called in the same way, the code will check number of dimensions and if when only one dimension I present it will skip the operations needed to work with multidimensional grids
 
 ----------------------
-Latest version v 0.8.0
+Version v 0.8.0
 ----------------------
 
 Main updates:
