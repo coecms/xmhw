@@ -1,4 +1,4 @@
-{% set version = "0.9.2" %}
+{% set version = "0.9.3" %}
 package:
     name: xmhw 
     version: {{ version }}
@@ -30,7 +30,7 @@ requirements:
 
 source:
     git_url:  https://github.com/coecms/xmhw.git 
-    git_rev: 0.9.2
+    git_rev: 0.9.3
 
 build:
     script: "{{ PYTHON }} -m pip install . --no-deps --ignore-installed"
