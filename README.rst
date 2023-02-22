@@ -6,8 +6,8 @@ XMHW - Xarray based Marine HeatWave code -
 
 .. image:: https://readthedocs.org/projects/xmhw/badge/?version=latest
   :target: https://xmhw.readthedocs.io/en/latest/
-.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.7662469.svg
-   :target: https://doi.org/10.5281/zenodo.7662469
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.7668235.svg
+   :target: https://doi.org/10.5281/zenodo.7668235
 
 .. content-marker-for-sphinx
 
@@ -44,7 +44,14 @@ Use
 ---
 Some examples of how to use the functions and explanations of how the functions work are shown in the readthedocs documentation linked above and the `xmhw_demo.ipynb notebook <https://github.com/coecms/xmhw/blob/master/docs/xmhw_demo.ipynb>_` in the docs folder.
 ----------------------
-Latest version v 0.9.2
+Latest version v 0.9.3
+----------------------
+
+Main updates:
+    * Fixed missing initialisation of point boolean variable to False 
+    
+----------------------
+Version v 0.9.2
 ----------------------
 
 Main updates:
