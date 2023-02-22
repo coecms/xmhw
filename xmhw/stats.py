@@ -89,6 +89,7 @@ def block_average(
     # and the mhw 'cell' coordinate should be renamed to be consistent
     sw_temp = False
     sw_cats = False
+    point = False
     # currently I'm try to accept any name for temperature as long as it
     # is passed on its own and only temp thresh seas if they are all
     # passed as a dataset. Might make more sense to deal with this
