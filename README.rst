@@ -44,6 +44,7 @@ Use
 ---
 
 Some examples of how to use the functions and explanations of how the functions work are shown in the readthedocs documentation linked above and the `xmhw_demo.ipynb notebook <https://github.com/coecms/xmhw/blob/master/docs/xmhw_demo.ipynb>_` in the docs folder.
+
 ----------------------
 Latest version v 0.9.3
 ----------------------
