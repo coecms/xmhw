@@ -122,6 +122,8 @@ def threshold(
     dims = list(temp.dims)
     if len(dims) == 1:
         point = True
+    else:
+        point = False
     # Save original attributes in dictionary to assign to final dataset
     ds_attrs = {}
     ds_attrs["ts"] = temp.attrs
@@ -378,6 +380,8 @@ def detect(
     dims = list(temp.dims)
     if len(dims) == 1:
         point = True
+    else:
+        point = False
     # if time dimension different from time, rename it
     #temp = temp.rename({tdim: "time"})
     # save original attributes in a dictionary to assign to final dataset
