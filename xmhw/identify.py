@@ -144,12 +144,11 @@ def feb29(ts, dim="doy"):
     -------
         Interpolated values for Feb29
     """
+    ts['doy'] = ts.doy.compute()
     return (
         ts.where(ts.doy.isin([59, 60, 61]), drop=True).mean(
             dim=dim, skipna=True).values
     )
-    # return (ts.where(ts.doy.isin([59,61]),drop=True).mean(
-    #         dim=dim, skipna=True).values)
 
 
 @dask.delayed(nout=1)
