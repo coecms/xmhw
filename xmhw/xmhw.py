@@ -209,9 +209,15 @@ def threshold(
     else:
         ds["thresh"] = xr.concat(thresh_results, dim='cell')
         ds["seas"] = xr.concat(seas_results, dim='cell')
-        dims = [k for k in ts.cell.coords.keys()]
-        ds = ds.set_xindex(dims)
-        ds = ds.unstack(dim='cell')
+        # after concatenating on stacked dim cell
+        # need to make sure cell is smae across concatenated obj by reindexing
+        # get multindex from ts stacked
+        multi_idx = ts.cell.indexes.get(key='cell')
+        # toavoid Future warning and issues 
+        # FutureWarning: the `pandas.MultiIndex` object(s) passed as 'cell' coordinate(s) or data variable(s) will no longer be implicitly promoted and wrapped into multiple indexed coordinates in the future (i.e., one coordinate for each multi-index level + one dimension coordinate). If you want to keep this behavior, you need to first wrap it explicitly using `mindex_coords = xarray.Coordinates.from_pandas_multiindex(mindex_obj, 'dim')` and pass it as coordinates,  `dataset.assign_coords(mindex_coords)` 
+        mindex_coords = xr.Coordinates.from_pandas_multiindex(multi_idx, 'cell')
+        ds = ds.assign_coords(mindex_coords)
+        ds = ds.unstack('cell')
     ds.thresh.name = "threshold"
     ds.seas.name = "seasonal"
 
