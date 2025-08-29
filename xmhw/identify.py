@@ -311,7 +311,9 @@ def join_gaps(st, end, events, maxGap):
         eshift = eshift.fillna(value=-(maxGap + 1))
         gaps = (s - eshift) > maxGap + 1
         gaps_shifted = gaps.shift(-1)
-        gaps_shifted = gaps_shifted.fillna(value=True)
+        print(gaps_shifted)
+        gaps_shifted = gaps_shifted.astype(bool).fillna(value=True)
+        print(gaps_shifted)
         s = s.where(gaps).dropna()
         e = e.where(gaps_shifted).dropna()
         if len(s) < len(st.dropna()):

@@ -138,20 +138,20 @@ def filter_data():
     st = pd.Series(index=time, dtype="float64").rename("start")
     end = pd.Series(index=time, dtype="float64").rename("end")
     events = pd.Series(index=time, dtype="float64").rename("events")
-    st[5] = 1
-    st[16] = 11
-    st[24] = 20
-    end[5] = 5
-    end[16] = 16
-    end[24] = 24
+    st.iloc[5] = 1
+    st.iloc[16] = 11
+    st.iloc[24] = 20
+    end.iloc[5] = 5
+    end.iloc[16] = 16
+    end.iloc[24] = 24
     events[1:6] = 1
     events[11:17] = 11
     events[20:25] = 20
     st2 = st.copy()
     end2 = end.copy()
     events2 = events.copy()
-    st2[24] = np.nan
-    end2[16] = np.nan
+    st2.iloc[24] = np.nan
+    end2.iloc[16] = np.nan
     events2[17:25] = 11
     return (bthresh, idxarr, st, end, events, st2, end2, events2)
 
@@ -334,15 +334,15 @@ def inter_data():
 
 @pytest.fixture
 def calendars():
-    noleap = xr.cftime_range("2000", periods=6, calendar="noleap")
-    all_leap = xr.cftime_range("2000", periods=6, calendar="all_leap")
-    day_365 = xr.cftime_range("2000", periods=6, calendar="365_day")
-    day_366 = xr.cftime_range("2000", periods=6, calendar="366_day")
-    gregorian = xr.cftime_range("2000", periods=6, calendar="gregorian")
-    standard = xr.cftime_range("2000", periods=6, calendar="standard")
-    julian = xr.cftime_range("2000", periods=6, calendar="julian")
-    proleptic = xr.cftime_range(
-        "2000", periods=6, calendar="proleptic_gregorian"
+    noleap = xr.date_range("2000", periods=6, calendar="noleap", use_cftime=True)
+    all_leap = xr.date_range("2000", periods=6, calendar="all_leap", use_cftime=True)
+    day_365 = xr.date_range("2000", periods=6, calendar="365_day", use_cftime=True)
+    day_366 = xr.date_range("2000", periods=6, calendar="366_day", use_cftime=True)
+    gregorian = xr.date_range("2000", periods=6, calendar="gregorian", use_cftime=True)
+    standard = xr.date_range("2000", periods=6, calendar="standard", use_cftime=True)
+    julian = xr.date_range("2000", periods=6, calendar="julian", use_cftime=True)
+    proleptic = xr.date_range(
+        "2000", periods=6, calendar="proleptic_gregorian", use_cftime=True
     )
     ndays_year = {
         "noleap": 365,
