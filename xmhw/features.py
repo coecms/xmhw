@@ -17,6 +17,9 @@
 
 
 import numpy as np
+import pandas as pd
+# it will be default in pandas 3.0
+pd.set_option("mode.copy_on_write", True)
 
 
 def mhw_df(df):
@@ -88,7 +91,7 @@ def mhw_features(dftime, last, tdim, dims):
     # calculate some of the mhw properties aggregating by events
     df = agg_df(dftime, tdim, dims)
     # calculate the rest of the mhw properties
-    df = properties(df, dftime.loc[:,'relThresh'], dftime.loc[:,'mabs'])
+    df = properties(df, dftime)#.loc[:,'relThresh'], dftime.loc[:,'mabs'])
     # calculate onset decline rates
     df = onset_decline(df, last)
     return df
@@ -109,56 +112,53 @@ def agg_df(df, tdim, dims):
     dfout: pandas Dataframe
         Includes most MHW properties by events
     """
-
-    # using an aggregation dictionary to avoid apply.
-    dfout = df.groupby("events", group_keys=True).agg(
-        event=("events", "first"),
-        index_start=("start", "first"),
-        index_end=("end", "first"),
-        time_start=(tdim, "first"),
-        time_end=(tdim, "last"),
-        relS_imax=("relSeas", np.argmax),
+    # create aggregation dictionary
+    agg_dict = { 
+        "event": ("events", "first"),
+        "index_start": ("start", "first"),
+        "index_end": ("end", "first"),
+        "time_start": (tdim, "first"),
+        "time_end": (tdim, "last"),
+        "relS_imax": ("relSeas", np.argmax),
         # time as dataframe index, instead
         # of the timeseries index
-        time_peak=("relSeas", "idxmax"),
+        "time_peak": ("relSeas", "idxmax"),
         # the following are needed for onset_decline
         # anom_plus is (sst -seas) shifted 1 day ahead
         # anom_minus is (sst -seas) shifted 1 day back
-        relS_first=("relSeas", "first"),
-        relS_last=("relSeas", "last"),
-        anom_first=("anom_plus", "first"),
-        anom_last=("anom_minus", "last"),
+        "relS_first": ("relSeas", "first"),
+        "relS_last": ("relSeas", "last"),
+        "anom_first": ("anom_plus", "first"),
+        "anom_last": ("anom_minus", "last"),
         # intensity_max can be used as relSeas(index_peak)
         # in onset_decline
-        intensity_max=("relSeas", "max"),
-        intensity_mean=("relSeas", "mean"),
-        intensity_cumulative=("relSeas", "sum"),
-        severity_max=("severity", "max"),
-        severity_mean=("severity", "mean"),
-        severity_cumulative=("severity", "sum"),
-        severity_var=("severity", "var"),
-        relS_var=("relSeas", "var"),
-        relT_var=("relThresh", "var"),
-        intensity_mean_relThresh=("relThresh", "mean"),
-        intensity_cumulative_relThresh=("relThresh", "sum"),
-        intensity_mean_abs=("mabs", "mean"),
-        mabs_var=("mabs", "var"),
-        intensity_cumulative_abs=("mabs", "sum"),
-        cats_max=("cats", "max"),
-        duration_moderate=("duration_moderate", "sum"),
-        duration_strong=("duration_strong", "sum"),
-        duration_severe=("duration_severe", "sum"),
-        duration_extreme=("duration_extreme", "sum"),
-    ) 
+        "intensity_max": ("relSeas", "max"),
+        "intensity_mean": ("relSeas", "mean"),
+        "intensity_cumulative": ("relSeas", "sum"),
+        "severity_max": ("severity", "max"),
+        "severity_mean": ("severity", "mean"),
+        "severity_cumulative": ("severity", "sum"),
+        "severity_var": ("severity", "var"),
+        "relS_var": ("relSeas", "var"),
+        "relT_var": ("relThresh", "var"),
+        "intensity_mean_relThresh": ("relThresh", "mean"),
+        "intensity_cumulative_relThresh": ("relThresh", "sum"),
+        "intensity_mean_abs": ("mabs", "mean"),
+        "mabs_var": ("mabs", "var"),
+        "intensity_cumulative_abs": ("mabs", "sum"),
+        "cats_max": ("cats", "max"),
+        "duration_moderate": ("duration_moderate", "sum"),
+        "duration_strong": ("duration_strong", "sum"),
+        "duration_severe": ("duration_severe", "sum"),
+        "duration_extreme": ("duration_extreme", "sum")
+        }
     # adding dimensions used in stacked cell to recreate cell later
-    # sending values to list to avoid warnings
-    for d in dims:
-        val = df[d].to_list()
-        dfout.loc[:,d] = val[0] 
+    agg_dict.update( {d: (d, "first") for d in dims} )
+    dfout = df.groupby("events", group_keys=True).agg(**agg_dict)
     return dfout
 
 
-def properties(df, relT, mabs):
+def properties(df, dftime):
     """Calculate the rest of MHW properties that cannot be returned
     directly by the groupby aggregations.
 
@@ -166,6 +166,8 @@ def properties(df, relT, mabs):
     ----------
     df: pandas Dataframe
         Includes most MHW properties by events
+    dftime: pandas Dataframe
+        Includes MHW characteristics along time index
     relT: pandas Series
         Difference between ts and threshold where there is an event
     mabs: pandas Series
@@ -176,21 +178,18 @@ def properties(df, relT, mabs):
     df: pandas Dataframe
         As input but with more MHW properties added
     """
-
-    df2 = df.copy()
-    df2['index_peak'] = df.event + df.relS_imax
-    df2['intensity_var'] = np.sqrt(df.relS_var)
-    df2['severity_var'] = np.sqrt(df.severity_var)
-    df2['intensity_max_relThresh'] = relT[df.time_peak].values
-    df2['intensity_max_abs'] = mabs[df.time_peak].values
-    df2['intensity_var_relThresh'] = np.sqrt(df.relT_var)
-    df2['intensity_var_abs'] = np.sqrt(df.mabs_var)
-    df2['category'] = np.minimum(df.cats_max, 4)
-    df2['duration'] = df.index_end - df.index_start + 1
-    del df
-    df2 = df2.drop(['relS_imax', 'relS_var', 'relT_var', 'cats_max', 'mabs_var'],
+    df['index_peak'] = df.event + df.relS_imax
+    df['intensity_var'] = np.sqrt(df.relS_var)
+    df['severity_var'] = np.sqrt(df.severity_var)
+    df['intensity_max_relThresh'] = dftime['relThresh'][df.time_peak].values
+    df['intensity_max_abs'] = dftime['mabs'][df.time_peak].values
+    df['intensity_var_relThresh'] = np.sqrt(df.relT_var)
+    df['intensity_var_abs'] = np.sqrt(df.mabs_var)
+    df['category'] = np.minimum(df.cats_max, 4)
+    df['duration'] = df.index_end - df.index_start + 1
+    df = df.drop(['relS_imax', 'relS_var', 'relT_var', 'cats_max', 'mabs_var'],
                  axis=1)
-    return df2
+    return df
 
 
 def get_rate(relSeas_peak, relSeas_edge, period):

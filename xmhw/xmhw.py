@@ -472,13 +472,16 @@ def detect(
         mhw_results = [r[0].assign_coords({d: r[0][d][0].values for d in dims})
                        for r in results[0]]
         mhw = xr.concat(mhw_results, dim='cell')
-        mhw = mhw.set_xindex(dims)
+        # to avoid Future warning and issues
+        multi_idx = ts.cell.indexes.get(key='cell')
+        mindex_coords = xr.Coordinates.from_pandas_multiindex(multi_idx, 'cell')
+        mhw = mhw.assign_coords(mindex_coords)
         mhw = mhw.unstack(dim='cell')
         if intermediate:
             inter_results = [r[1].assign_coords({d: r[1][d][0].values for d in dims})
                              for r in results[0]]
             mhw_inter = xr.concat(inter_results, dim='cell')
-            mhw_inter = mhw_inter.set_xindex(dims)
+            mhw_inter = mhw_inter.assign_coords(mindex_coords)
             mhw_inter = mhw_inter.unstack('cell')
             mhw_inter = mhw_inter.rename({'index': 'time'})
             mhw_inter = mhw_inter.squeeze(drop=True)
