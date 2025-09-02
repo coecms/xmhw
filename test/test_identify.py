@@ -35,7 +35,7 @@ import xarray.testing as xrtest
 import pandas.testing as pdtest
 
 
-@pytest.mark.xfail
+#@pytest.mark.xfail
 def test_add_doy(oisst_ts, oisst_doy, days5_doy, mon_doy):
     doy = add_doy(oisst_ts, tdim="time").doy.values
     nptest.assert_array_equal(doy, oisst_doy)
@@ -77,7 +77,7 @@ def test_runavg():
         runavg(a, 2).compute()
 
 
-@pytest.mark.xfail
+#@pytest.mark.xfail
 def test_window_roll(oisst_ts, tstack):
     ts = oisst_ts.sel(
         time=slice("2003-01-01", "2003-01-03"), lat=-42.625, lon=148.125
@@ -100,8 +100,8 @@ def test_join_gaps(filter_data):
     pdtest.assert_series_equal(df2.end, end2)
     pdtest.assert_series_equal(df2.events, evs2)
     # testing only last two events to make sure it works with array len 1
-    st[5] = np.nan
-    end[5] = np.nan
+    st.iloc[5] = np.nan
+    end.iloc[5] = np.nan
     evs[1:6] = np.nan
     df3 = join_gaps(st, end, evs, 3)
     pdtest.assert_series_equal(df3.events[10:], evs2[10:])
@@ -129,7 +129,7 @@ def test_join_events(join_data):
     assert True
 
 
-@pytest.mark.xfail
+#@pytest.mark.xfail
 def test_land_check(oisst_ts, clim_oisst, landgrid):
     newts = land_check(oisst_ts)
     assert newts.shape == (731, 12)
@@ -145,8 +145,10 @@ def test_land_check(oisst_ts, clim_oisst, landgrid):
     diffdim = oisst_ts.rename({"lat": "a", "lon": "b", "time": "c"})
     newts = land_check(diffdim, tdim="c")
     assert newts.shape == (731, 12)
-    newts = land_check(clim_oisst.thresh1)
-    assert newts.shape == (366, 1)
+    # remiving this test as it raises exception as it should as thresh1
+    # has only time dim unless a "cell" dim was added before
+    # newts = land_check(clim_oisst.thresh1)
+    # assert newts.shape == (366, 1)
     # test exception raised when all points are land
     with pytest.raises(XmhwException):
         land_check(landgrid)

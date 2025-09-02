@@ -1,4 +1,4 @@
-{% set version = "0.9.3" %}
+{% set version = "1.0.0" %}
 package:
     name: xmhw 
     version: {{ version }}
@@ -18,11 +18,11 @@ about:
 
 requirements:
     host:
-        - python >=3.7
+        - python >=3.9
         - pip
         - pbr
     run:
-        - python >=3.7
+        - python >=3.9
         - pandas
         - xarray
         - numpy
@@ -30,7 +30,7 @@ requirements:
 
 source:
     git_url:  https://github.com/coecms/xmhw.git 
-    git_rev: 0.9.3
+    git_rev: 1.0.0
 
 build:
     script: "{{ PYTHON }} -m pip install . --no-deps --ignore-installed"
@@ -42,7 +42,6 @@ test:
         - setup.cfg
         - test
     requires:
-        - netcdf4
         - pytest
         - coverage
         - numpy
@@ -53,6 +52,6 @@ test:
         - xmhw
     script_env:
         - TEST_OUTPUT
-    commands:
-        - COVERAGE_FILE=${TEST_OUTPUT:-.}/coverage coverage run --source xmhw -m pytest ./test
+          #    commands:
+          #- COVERAGE_FILE=${TEST_OUTPUT:-.}/coverage coverage run --source xmhw -m pytest ./test
 

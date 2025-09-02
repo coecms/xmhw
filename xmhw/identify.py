@@ -311,7 +311,7 @@ def join_gaps(st, end, events, maxGap):
         eshift = eshift.fillna(value=-(maxGap + 1))
         gaps = (s - eshift) > maxGap + 1
         gaps_shifted = gaps.shift(-1)
-        gaps_shifted = gaps_shifted.fillna(value=True)
+        gaps_shifted = gaps_shifted.astype(bool).fillna(value=True)
         s = s.where(gaps).dropna()
         e = e.where(gaps_shifted).dropna()
         if len(s) < len(st.dropna()):
@@ -516,8 +516,10 @@ def land_check(temp, tdim="time", anynans=False):
             raise XmhwException(f"Dimension {d} has 0 lenght, exiting")
     # removing multi-index creation, as this was disappearing during percentile and mean operation anyway,
     # and potentially slows down calculation
-    # adding sorted to be consistent if applying functipn to different arrays with same dimensions
-    ts = temp.stack(cell=(sorted(dims)), create_index=False)
+    # 2025-08-29: re-introducing multi-index creation so we can use the MultiIndex at the end to reindex 
+    # concatenated results before unstacking.
+    # adding sorted to be consistent if applying function to different arrays with same dimensions
+    ts = temp.stack(cell=(sorted(dims)), create_index=True)
     # drop cells that have all/any nan values along time
     how = "all"
     if anynans:
