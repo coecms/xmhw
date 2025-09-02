@@ -1,4 +1,3 @@
-xmhw
 sphinx
 sphinx-rtd-theme
 sphinx_design
