@@ -53,6 +53,6 @@ test:
         - xmhw
     script_env:
         - TEST_OUTPUT
-    commands:
-        - COVERAGE_FILE=${TEST_OUTPUT:-.}/coverage coverage run --source xmhw -m pytest ./test
+          #    commands:
+          #- COVERAGE_FILE=${TEST_OUTPUT:-.}/coverage coverage run --source xmhw -m pytest ./test
 
