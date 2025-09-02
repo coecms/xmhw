@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - master
-      - timestep
+      - fixpandas
   pull_request:
     branches:
       - master
@@ -44,7 +44,7 @@ jobs:
       run: |
         conda install pytest coverage codecov
         conda run python -m pytest
-        conda run coverage run --source xmhw -m py.test
+        conda run coverage run --source xmhw -m pytest
     - name: Upload to codecov 
       if: steps.build.outcome == 'success'
       run: |
