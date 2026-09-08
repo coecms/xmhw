@@ -10,21 +10,23 @@ Functions:
 - **block_average**  work in progress
 
 
--------
 Install
 -------
 
-    You can install the latest version of xmhw directly from conda (coecms channel)
+You can install the latest version of xmhw from PyPI::
 
-    conda install -c coecms -c conda-forge xmhw 
+    python -m pip install xmhw
 
-    If you want to install an unstable version or a different branch:
+Or directly from conda (coecms channel)::
 
-    * git clone 
-    * git checkout <branch-name>   (if installing a a different branch from master)
-    * cd xmhw
-    * python setup.py install or pip install ./ 
-      use --user with either othe commands if you want to install it in ~/.local
+    conda install -c coecms -c conda-forge xmhw
+
+To install an unstable version or a different branch::
+
+    git clone https://github.com/coecms/xmhw
+    cd xmhw
+    git checkout <branch-name>
+    python -m pip install .
 
 ---------------------
 Working on NCI server
