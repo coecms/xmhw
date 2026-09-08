@@ -17,6 +17,7 @@ Welcome to xmhw's documentation!
    block_average.rst
    dask.rst
    frequency.rst
+   releasing.rst
 
 
 
